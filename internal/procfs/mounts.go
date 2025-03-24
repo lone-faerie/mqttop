@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/lone-faerie/mqttop/log"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
 	"github.com/lone-faerie/mqttop/internal/file"
 )
@@ -145,6 +146,7 @@ func findMounts(search map[string]*Mount, valid map[string]bool, useFSTab bool) 
 			FSType: string(fstype),
 		}
 		if (useFSTab && fstab[info.Mnt]) || (!useFSTab && valid[info.FSType]) {
+			log.Debug("Found disk", "mnt", info.Mnt)
 			search[info.Mnt] = info
 		}
 	}

@@ -1,11 +1,12 @@
 services:
   mqttop:
-    image: mqttop:latest
+    image: mqttop:gpu
     environment:
       - MQTTOP_ROOTFS_PATH=/host
     volumes:
-      - "./cmd/config.yaml:/config/config.yml"
+      - "./cmd/config.yml:/config/config.yml"
       - "/:/host:ro"
+    network_mode: host
     runtime: nvidia
     deploy:
       resources:

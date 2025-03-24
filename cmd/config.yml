@@ -1,0 +1,18 @@
+interval: 2s
+mqtt:
+  broker: 192.168.1.20:1883
+  username: mqttop
+  password: 9dqG5OposzTDmtMV
+  log_level: DISABLED
+discovery:
+  wait_topic: homeassistant/status
+  wait_payload: online
+dirs:
+  - path: /media/jellyfin/media/movies
+    watch: true
+  - path: /media/jellyfin/media/tvseries
+    watch: true
+net:
+  only_physical: true
+disks:
+  show_io: true

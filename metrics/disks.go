@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"context"
-	"golang.org/x/sys/unix"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/lone-faerie/mqttop/log"
 
 	"github.com/lone-faerie/mqttop/internal/byteutil"
+	"github.com/lone-faerie/mqttop/internal/file"
 	"github.com/lone-faerie/mqttop/internal/procfs"
 	"github.com/lone-faerie/mqttop/internal/sysfs"
 )
@@ -136,9 +136,10 @@ func (d *Disks) loop(ctx context.Context) {
 			err = d.Update()
 			if err == ErrNoChange {
 				log.Debug("disks updated, no change")
+				// err = nil
 				break
 			}
-			log.Debug("Disks updated")
+			log.Debug("disks updated", "err", err)
 			ch = d.ch
 		case <-rescanC:
 			d.Rescan()
@@ -147,9 +148,10 @@ func (d *Disks) loop(ctx context.Context) {
 				err = d.Update()
 				if err == ErrNoChange {
 					log.Debug("disks updated, no change")
-					break
+					err = nil
+					//break
 				}
-				log.Debug("disks updated")
+				log.Debug("disks updated", "err", err)
 				ch = d.ch
 			default:
 			}
@@ -187,6 +189,7 @@ func (d *Disks) rescan(firstRun bool) error {
 			dcfg := d.cfg.Disks.ConfigFor(name)
 			disk := newDisk(mnt, d.cfg, dcfg)
 			if err := disk.Update(); err != nil {
+				log.Error("can't add disk", err, "path", disk.Mnt)
 				continue
 			}
 			if dcfg != nil && dcfg.SizeUnit != "" {
@@ -197,6 +200,9 @@ func (d *Disks) rescan(firstRun bool) error {
 				disk.size = size
 			} else {
 				disk.size = byteutil.SizeOf(disk.total)
+			}
+			if firstRun {
+				disk.total = 0
 			}
 			d.disks[name] = disk
 		}
@@ -299,8 +305,8 @@ func (d *Disk) update(wg *sync.WaitGroup) error {
 }
 
 func (d *Disk) Update() (err error) {
-	var stat unix.Statfs_t
-	if err = unix.Statfs(d.Mnt, &stat); err != nil {
+	stat, err := file.Statfs(d.Mnt)
+	if err != nil {
 		return
 	}
 	total := stat.Blocks * uint64(stat.Frsize)
@@ -320,9 +326,11 @@ func (d *Disk) Update() (err error) {
 
 	r, w, t, e := d.BlockIO.Read()
 	if e != nil {
+		log.Warn("Can't read block io", "mnt", d.Mnt, "cause", err)
+		d.showIO = false
 		return e
 	}
-	if d.reads == r && d.writes == w && d.ticks == t {
+	if err == ErrNoChange && d.reads == r && d.writes == w && d.ticks == t {
 		err = ErrNoChange
 	}
 	d.reads = r

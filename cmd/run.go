@@ -20,9 +20,9 @@ import (
 )
 
 var (
-	cfgPath []string
-	saveCfg bool
-	cfg     *config.Config
+	cfgPath  []string
+	writeCfg bool
+	cfg      *config.Config
 )
 
 var (
@@ -49,9 +49,8 @@ var (
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 			initConfig()
 			cfg, err = config.Load(cfgPath...)
-			log.Debug("config.Load", "cfg", cfg, "err", err)
 			if errors.Is(err, os.ErrNotExist) {
-				saveCfg = true
+				writeCfg = true
 				err = nil
 			}
 			if err != nil {
@@ -202,8 +201,8 @@ func runBridge(cmd *cobra.Command, _ []string) {
 	}
 	defer func() {
 		cancel()
-		if saveCfg {
-			cfg.Save(cfgPath[0])
+		if writeCfg {
+			cfg.Write(cfgPath[0])
 		}
 		bridge.Disconnect()
 		log.Info("Done")

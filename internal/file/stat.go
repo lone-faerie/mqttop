@@ -65,3 +65,12 @@ func ChangeTime(name string) (sec, nsec int64, err error) {
 	sec, nsec = stat.Ctim.Unix()
 	return
 }
+
+func Statfs(name string) (stat unix.Statfs_t, err error) {
+	name, err = abs(name)
+	if err != nil {
+		return
+	}
+	err = unix.Statfs(name, &stat)
+	return
+}

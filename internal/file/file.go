@@ -5,28 +5,9 @@ import (
 	//	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"github.com/lone-faerie/mqttop/log"
 )
 
 const Separator = string(os.PathSeparator)
-
-var rootFSPath string
-
-func init() {
-	if s, ok := os.LookupEnv("MQTTOP_ROOTFS_PATH"); ok {
-		rootFSPath = filepath.Clean(s)
-	}
-	log.Debug("", "Root Path", rootFSPath)
-}
-
-func rootPath(path string) string {
-	if rootFSPath != "" && filepath.IsAbs(path) && !strings.HasPrefix(path, rootFSPath) {
-		return rootFSPath + path
-	}
-	return path
-}
 
 type File struct {
 	f      *os.File
@@ -101,4 +82,9 @@ func Canonical(elem ...string) string {
 	}
 	symp, _ = abs(symp)
 	return symp
+}
+
+func Abs(path string) string {
+	path, _ = abs(path)
+	return path
 }

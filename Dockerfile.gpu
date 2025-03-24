@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+
+# ======== Build stage - GPU ========
+FROM golang:1.24 AS build
+
+ARG VERSION
+
+# Download Go modules
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Set build environment variables
+ENV BIN_OUT_DIR="/bin" \
+	GOOS=linux \
+	GO_BUILD_TAGS=nvidia,debug
+
+# Build
+RUN make build
+
+# ======== Final stage ========
+FROM gcr.io/distroless/base-debian12
+# FROM debian
+
+ARG VERSION
+
+WORKDIR /app
+
+COPY --from=build /bin/mqttop /app/mqttop
+
+ENV MQTTOP_CONFIG_PATH=/config/config.yml
+
+ENTRYPOINT ["/app/mqttop", "run"]

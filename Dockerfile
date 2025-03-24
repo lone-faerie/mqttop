@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 # ======== Build stage ========
-FROM golang:1.24 AS build
+FROM golang:1.24-alpine AS build
+RUN apk add make
+
+ARG VERSION
 
 # Download Go modules
 COPY go.mod go.sum ./
@@ -12,13 +15,14 @@ COPY . .
 # Set build environment variables
 ENV BIN_OUT_DIR="/bin" \
 	GOOS=linux
-	GO_TAGS=debug
 
 # Build
 RUN make build
 
 # ======== Final stage ========
-FROM debian
+FROM scratch
+
+ARG VERSION
 
 WORKDIR /app
 
