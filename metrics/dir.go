@@ -281,6 +281,7 @@ func (d *Dir) startWatch(ctx context.Context) error {
 	}
 	for path := range d.watched {
 		w.Add(path)
+		log.Debug("Watching dir", "path", path)
 	}
 	d.watcher = w
 	return nil

@@ -109,7 +109,7 @@ func NewNvidiaGPU(cfg *config.Config) (*NvidiaGPU, error) {
 		log.Debug("Error initializing nvml", "err", err)
 		return nil, err
 	}
-	log.Debug("nvml initialized")
+	log.Info("nvml initialized")
 	if err := g.init(cfg); err != nvml.SUCCESS {
 		g.shutdown()
 		return nil, err
@@ -338,7 +338,7 @@ func (g *NvidiaGPU) Updated() <-chan error {
 func (g *NvidiaGPU) shutdown() {
 	g.nvmlOnce.Do(func() {
 		nvml.Shutdown()
-		log.Debug("nvml shutdown")
+		log.Info("nvml shutdown")
 	})
 }
 

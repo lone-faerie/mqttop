@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"reflect"
 	"slices"
@@ -11,40 +10,39 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/lone-faerie/mqttop/internal/byteutil"
+	"github.com/lone-faerie/mqttop/internal/secrets"
 	"github.com/lone-faerie/mqttop/log"
 )
 
 type Config struct {
-	Interval    time.Duration   `yaml:"interval"`
-	Temperature string          `yaml:"temperature"`
-	SizeFormat  string          `yaml:"size_format,omitempty"`
-	MQTT        MQTTConfig      `yaml:"mqtt,omitempty"`
-	Discovery   DiscoveryConfig `yaml:"discovery,omitempty"`
-	Log         LogConfig       `yaml:"log,omitempty"`
-	CPU         CPUConfig       `yaml:"cpu,omitempty"`
-	Memory      MemoryConfig    `yaml:"memory,omitempty"`
-	Disks       DisksConfig     `yaml:"disks,omitempty"`
-	Net         NetConfig       `yaml:"net,omitempty"`
-	Battery     BatteryConfig   `yaml:"battery,omitempty"`
-	Dirs        []DirConfig     `yaml:"dirs,omitempty"`
-	GPU         GPUConfig       `yaml:"gpu,omitempty"`
+	Interval  time.Duration   `yaml:"interval"`
+	MQTT      MQTTConfig      `yaml:"mqtt,omitempty"`
+	Discovery DiscoveryConfig `yaml:"discovery,omitempty"`
+	Log       LogConfig       `yaml:"log,omitempty"`
+	CPU       CPUConfig       `yaml:"cpu,omitempty"`
+	Memory    MemoryConfig    `yaml:"memory,omitempty"`
+	Disks     DisksConfig     `yaml:"disks,omitempty"`
+	Net       NetConfig       `yaml:"net,omitempty"`
+	Battery   BatteryConfig   `yaml:"battery,omitempty"`
+	Dirs      []DirConfig     `yaml:"dirs,omitempty"`
+	GPU       GPUConfig       `yaml:"gpu,omitempty"`
 
 	FormatSize func(v int, bits bool) string `yaml:"-"`
 }
 
 func Default() *Config {
 	cfg := &Config{
-		Interval:    2 * time.Second,
-		Temperature: "C",
-		MQTT:        defaultMQTT,
-		Discovery:   defaultDiscovery,
-		CPU:         defaultCPU,
-		Memory:      defaultMemory,
-		Disks:       defaultDisks,
-		Net:         defaultNet,
-		Battery:     defaultBattery,
-		GPU:         defaultGPU,
+		Interval:  2 * time.Second,
+		MQTT:      defaultMQTT,
+		Discovery: defaultDiscovery,
+		CPU:       defaultCPU,
+		Memory:    defaultMemory,
+		Disks:     defaultDisks,
+		Net:       defaultNet,
+		Battery:   defaultBattery,
+		GPU:       defaultGPU,
 	}
+	cfg.Expand()
 	cfg.load()
 	return cfg
 }
@@ -61,26 +59,6 @@ func Load(file ...string) (cfg *Config, err error) {
 		return
 	}
 
-	switch cfg.Temperature {
-	case "f", "F", "fahrenheit", "Fahrenheit":
-		cfg.Temperature = "F"
-	case "c", "C", "celsius", "Celsius", "centigrade", "Centigrade":
-		cfg.Temperature = "C"
-	default:
-		err = errors.New("config: invalid temperature " + cfg.Temperature)
-		return
-	}
-
-	switch cfg.SizeFormat {
-	case "h", "human", "human-readable":
-		cfg.SizeFormat = "h"
-		cfg.FormatSize = FormatHuman
-	case "b", "bytes":
-		cfg.SizeFormat = "b"
-		cfg.FormatSize = FormatBytes
-	case "si":
-		cfg.FormatSize = FormatSI
-	}
 	err = cfg.load()
 	log.Info("Config loaded")
 	return
@@ -116,36 +94,45 @@ func (cfg *Config) load() (err error) {
 	return
 }
 
-func expandEnv(v reflect.Value) {
+func expand(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.String:
-		v.SetString(os.ExpandEnv(v.String()))
+		s := v.String()
+		if secret, ok := secrets.CutPrefix(s); ok {
+			s = secrets.MustRead(secret)
+		} else {
+			s = os.ExpandEnv(s)
+		}
+		v.SetString(s)
 	case reflect.Struct:
 		n := v.NumField()
 		for i := 0; i < n; i++ {
-			expandEnv(v.Field(i))
+			expand(v.Field(i))
 		}
 	case reflect.Slice, reflect.Array:
 		n := v.Len()
 		for i := 0; i < n; i++ {
-			expandEnv(v.Index(i))
+			expand(v.Index(i))
 		}
 	}
 }
 
-func (cfg *Config) ExpandEnv() {
+func (cfg *Config) Expand() {
 	v := reflect.ValueOf(cfg).Elem()
-	expandEnv(v)
+	expand(v)
 }
 
-func (cfg *Config) Save(file string) error {
+func (cfg *Config) Write(file string) error {
 	f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
 	enc := yaml.NewEncoder(f)
 	defer enc.Close()
+
+	enc.SetIndent(2)
 	return enc.Encode(cfg)
 }
 

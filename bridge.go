@@ -76,7 +76,7 @@ func New(cfg *config.Config) *Bridge {
 		"mqttop/bridge/status", "offline", 1, true,
 	)
 	client := mqtt.NewClient(opts)
-	//client := NewMockClient(opts, true)
+	//client := NewMockClient(opts, false)
 	return &Bridge{
 		client: client,
 		m:      metrics.New(cfg),
@@ -311,6 +311,7 @@ func (b *Bridge) Discover(ctx context.Context) error {
 		log.Error("Unable to marshal discovery payload", err)
 		return err
 	}
+	log.Println(string(pay))
 	topic, err := disc.Topic(b.cfg.Discovery.Prefix)
 	if err != nil {
 		log.Error("Unable to get discovery topic", err)

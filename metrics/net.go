@@ -27,6 +27,8 @@ type NetInterface struct {
 	DownloadRate uint64
 	rate         byteutil.ByteRate
 	lastUpdate   time.Time
+	lastTx       uint64
+	lastRx       uint64
 }
 
 func (iface *NetInterface) Running() bool {
@@ -165,6 +167,7 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 				if err != nil {
 					rate = byteutil.MiBps
 				}
+				log.Debug("Adding interface", "name", ifname)
 				n.interfaces[ifname] = &NetInterface{
 					Interface: interfaces[i],
 					IP:        ip,
@@ -347,8 +350,10 @@ func (iface *NetInterface) Update() error {
 		return err
 	}
 	now := time.Now()
-	iface.Download = rx - iface.Download
-	iface.Upload = tx - iface.Upload
+	iface.Download = rx - iface.lastRx
+	iface.Upload = tx - iface.lastTx
+	iface.lastRx = rx
+	iface.lastTx = tx
 	delta := uint64(now.Sub(iface.lastUpdate) / time.Second)
 	if delta > 0 {
 		iface.DownloadRate = 100 * iface.Download / delta
