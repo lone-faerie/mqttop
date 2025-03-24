@@ -1,0 +1,16 @@
+services:
+  mqttop:
+    image: mqttop:latest
+    environment:
+      - MQTTOP_ROOTFS_PATH=/host
+    volumes:
+      - "./cmd/config.yaml:/config/config.yml"
+      - "/:/host:ro"
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

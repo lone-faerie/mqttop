@@ -1,0 +1,10 @@
+interval: 2s
+temperature: C
+mqtt:
+    broker: 192.168.1.20:1883
+    username: mqttop
+    password: 9dqG5OposzTDmtMV
+    log_level: DISABLED
+discovery:
+    wait_topic: homeassistant/status
+    wait_payload: online

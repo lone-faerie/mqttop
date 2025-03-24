@@ -1,0 +1,54 @@
+//go:build go1.24
+
+package file
+
+import (
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/lone-faerie/mqttop/internal/cleanup"
+)
+
+var root *os.Root
+
+func init() {
+	log.Println("Go >=1.24")
+	path := "/"
+	if s, ok := os.LookupEnv("MQTTOP_ROOTFS_PATH"); ok {
+		path = s
+	}
+	r, err := os.OpenRoot(path)
+	if err != nil {
+		panic(err)
+	}
+	root = r
+	cleanup.Register(func() { root.Close() })
+}
+
+func abs(name string) (string, error) {
+	if strings.HasPrefix(name, root.Name()) {
+		return name, nil
+	}
+	name, err := filepath.Abs(name)
+	if err != nil {
+		return name, err
+	}
+	if root.Name() == "/" {
+		return name, nil
+	}
+	return filepath.Join(root.Name(), name[1:]), nil
+}
+
+func open(name string) (*os.File, error) {
+	if strings.HasPrefix(name, root.Name()) {
+		return os.Open(name)
+	}
+	name, err := filepath.Abs(name)
+	if err != nil {
+		return nil, err
+	}
+	log.Println("Opening", name)
+	return root.Open(name[1:])
+}
