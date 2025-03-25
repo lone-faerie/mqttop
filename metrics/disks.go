@@ -37,7 +37,7 @@ type Disks struct {
 	disks  map[string]*Disk
 	showIO bool
 
-	cfg      *config.Config
+	cfg      *config.DisksConfig
 	interval time.Duration
 	tick     *time.Ticker
 	topic    string
@@ -52,25 +52,25 @@ type Disks struct {
 	ch    chan error
 }
 
-func newDisk(mnt *procfs.Mount, cfg *config.Config, dcfg *config.DiskConfig) *Disk {
-	d := &Disk{Mount: *mnt}
+func (d *Disks) newDisk(mnt *procfs.Mount, cfg *config.DiskConfig) *Disk {
+	disk := &Disk{Mount: *mnt}
 
-	if dcfg != nil && dcfg.Name != "" {
-		d.Name = dcfg.Name
-	} else if len(d.Mnt) == 1 && d.Mnt[0] == filepath.Separator {
-		d.Name = "root"
+	if cfg != nil && cfg.Name != "" {
+		disk.Name = cfg.Name
+	} else if len(disk.Mnt) == 1 && disk.Mnt[0] == filepath.Separator {
+		disk.Name = "root"
 	} else {
-		d.Name = filepath.Base(d.Mnt)
+		disk.Name = filepath.Base(disk.Mnt)
 	}
-	if cfg.Disks.ShowIO || (dcfg != nil && dcfg.ShowIO) {
-		d.BlockIO = sysfs.BlockStat(mnt)
-		d.showIO = d.BlockIO.IsValid()
+	if d.showIO || (cfg != nil && cfg.ShowIO) {
+		disk.BlockIO = sysfs.BlockStat(mnt)
+		disk.showIO = disk.BlockIO.IsValid()
 	}
-	return d
+	return disk
 }
 
 func NewDisks(cfg *config.Config) (*Disks, error) {
-	d := &Disks{cfg: cfg}
+	d := &Disks{cfg: &cfg.Disks}
 	if err := d.rescan(true); err != nil {
 		return nil, errNotSupported(d.Type(), err)
 	}
@@ -175,7 +175,7 @@ func (d *Disks) Start(ctx context.Context) (err error) {
 }
 
 func (d *Disks) rescan(firstRun bool) error {
-	mnts, err := procfs.MountInfo(d.cfg.Disks.UseFSTab)
+	mnts, err := procfs.MountInfo(d.cfg.UseFSTab)
 	if err != nil {
 		return err
 	}
@@ -183,12 +183,12 @@ func (d *Disks) rescan(firstRun bool) error {
 		d.disks = make(map[string]*Disk, len(mnts))
 	}
 	for name, mnt := range mnts {
-		if d.cfg.Disks.Excluded(name) {
+		if d.cfg.Excluded(name) {
 			continue
 		}
 		if _, ok := d.disks[name]; !ok {
-			dcfg := d.cfg.Disks.ConfigFor(name)
-			disk := newDisk(mnt, d.cfg, dcfg)
+			dcfg := d.cfg.ConfigFor(name)
+			disk := d.newDisk(mnt, dcfg)
 			if err := disk.Update(); err != nil {
 				log.Error("can't add disk", err, "path", disk.Mnt)
 				continue

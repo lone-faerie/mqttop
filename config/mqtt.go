@@ -20,6 +20,8 @@ type MQTTConfig struct {
 	ConnectTimeout    time.Duration `yaml:"connect_timeout,omitempty"`
 	PingTimeout       time.Duration `yaml:"ping_timeout,omitempty"`
 	WriteTimeout      time.Duration `yaml:"write_timeout,omitempty"`
+	BirthWillEnabled  bool          `yaml:"birth_lwt_enabled"`
+	BirthWillTopic    string        `yaml:"birth_lwt_topic"`
 	LogLevel          log.Level     `yaml:"log_level"`
 
 	tlsCert *tls.Certificate
@@ -38,14 +40,18 @@ type DiscoveryConfig struct {
 }
 
 var defaultMQTT = MQTTConfig{
-	LogLevel: log.LevelDisabled,
+	Broker:           "$MQTTOP_BROKER_ADDRESS",
+	Username:         "$MQTTOP_BROKER_USERNAME",
+	Password:         "$MQTTOP_BROKER_PASSWORD",
+	BirthWillEnabled: true,
+	BirthWillTopic:   "mqttop/bridge/status",
+	LogLevel:         log.LevelDisabled,
 }
 
 var defaultDiscovery = DiscoveryConfig{
-	Enabled:      true,
-	Prefix:       "homeassistant",
-	Availability: "mqttop/bridge/status",
-	Retained:     true,
+	Enabled:  true,
+	Prefix:   "homeassistant",
+	Retained: true,
 }
 
 func (cfg *MQTTConfig) ClientOptions() *mqtt.ClientOptions {

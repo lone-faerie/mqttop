@@ -46,9 +46,9 @@ var errNoMetrics = errors.New("no metrics")
 type Bridge struct {
 	client mqtt.Client
 
-	cfg    *config.Config
-	m      []metrics.Metric
-	states stateMap
+	discoveryCfg *config.DiscoveryConfig
+	m            []metrics.Metric
+	states       stateMap
 
 	updates chan metrics.Metric
 	once    sync.Once
@@ -72,16 +72,20 @@ func New(cfg *config.Config) *Bridge {
 	if cfg.MQTT.LogLevel <= log.LevelDebug {
 		mqtt.DEBUG = log.DebugLogger()
 	}
+	if cfg.Discovery.Enabled && cfg.Discovery.DeviceName == "username" {
+		cfg.Discovery.DeviceName = cfg.MQTT.Username
+	}
 	opts := cfg.MQTT.ClientOptions().SetWill(
-		"mqttop/bridge/status", "offline", 1, true,
+		cfg.MQTT.BirthWillTopic, "offline", 1, true,
 	)
 	client := mqtt.NewClient(opts)
 	//client := NewMockClient(opts, true)
-	return &Bridge{
-		client: client,
-		m:      metrics.New(cfg),
-		cfg:    cfg,
+	b := &Bridge{
+		client:       client,
+		m:            metrics.New(cfg),
+		discoveryCfg: &cfg.Discovery,
 	}
+	return b
 }
 
 func (b *Bridge) handleMetric(i int, m metrics.Metric) mqtt.MessageHandler {
@@ -100,13 +104,29 @@ func (b *Bridge) handleMetric(i int, m metrics.Metric) mqtt.MessageHandler {
 	}
 }
 
-func (b *Bridge) publishBirth(_ mqtt.Client) {
-	data, err := json.Marshal(&b.states)
-	if err != nil {
-		return
+func (b *Bridge) publishBirthOrWill(ctx context.Context, isBirth bool) (err error) {
+	var (
+		data []byte
+		opts = b.client.OptionsReader()
+	)
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	t := b.client.Publish("mqttop/bridge/status", 1, true, data)
-	t.Wait()
+	if isBirth {
+		data, err = json.Marshal(&b.states)
+		if err != nil {
+			return
+		}
+	} else {
+		data = opts.WillPayload()
+	}
+	t := b.client.Publish(opts.WillTopic(), opts.WillQos(), opts.WillRetained(), data)
+	select {
+	case <-ctx.Done():
+		return
+	case <-t.Done():
+	}
+	return t.Error()
 }
 
 func (b *Bridge) publishUpdates(ctx context.Context) {
@@ -202,16 +222,8 @@ func (b *Bridge) start(ctx context.Context) {
 				break
 			}
 		}
-		if birth, err := json.Marshal(&b.states); err == nil {
-			t := b.client.Publish("mqttop/bridge/status", 0, true, birth)
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.Done():
-			}
-			if err := t.Error(); err != nil {
-				log.Error("Error publishing birth message", err)
-			}
+		if err := b.publishBirthOrWill(ctx, true); err != nil {
+			log.Error("Unable to publish birth message", err)
 		}
 		go b.publishUpdates(ctx)
 	}()
@@ -240,9 +252,7 @@ func (b *Bridge) Connect(ctx context.Context) error {
 
 // Disconnect will end the connection with the server.
 func (b *Bridge) Disconnect() {
-	t := b.client.Publish("mqttop/bridge/status", 1, true, "offline")
-	t.WaitTimeout(time.Second)
-	if err := t.Error(); err != nil {
+	if err := b.publishBirthOrWill(nil, false); err != nil {
 		log.Warn("Unable to publish LWT on graceful disconnect", err)
 	}
 	b.client.Disconnect(500)
@@ -257,7 +267,7 @@ func (b *Bridge) Disconnect() {
 }
 
 func (b *Bridge) waitDiscover(ctx context.Context) error {
-	if b.cfg.Discovery.WaitTopic == "" {
+	if b.discoveryCfg.WaitTopic == "" {
 		log.Debug("Not waiting before discovery")
 		return nil
 	}
@@ -265,8 +275,8 @@ func (b *Bridge) waitDiscover(ctx context.Context) error {
 	defer close(ch)
 	handler := func(_ mqtt.Client, msg mqtt.Message) {
 		msg.Ack()
-		if string(msg.Payload()) == b.cfg.Discovery.WaitPayload {
-			t := b.client.Unsubscribe(b.cfg.Discovery.WaitTopic)
+		if string(msg.Payload()) == b.discoveryCfg.WaitPayload {
+			t := b.client.Unsubscribe(b.discoveryCfg.WaitTopic)
 			select {
 			case <-ctx.Done():
 			case <-t.Done():
@@ -277,7 +287,7 @@ func (b *Bridge) waitDiscover(ctx context.Context) error {
 			}
 		}
 	}
-	t := b.client.Subscribe(b.cfg.Discovery.WaitTopic, 0, handler)
+	t := b.client.Subscribe(b.discoveryCfg.WaitTopic, 0, handler)
 	select {
 	case <-ctx.Done():
 		return nil
@@ -300,7 +310,7 @@ func (b *Bridge) Discover(ctx context.Context) error {
 		return nil
 	default:
 	}
-	disc, err := discovery.New(b.cfg)
+	disc, err := discovery.New(b.discoveryCfg)
 	if err != nil {
 		log.Error("Unable to get discovery", err)
 		return err
@@ -316,12 +326,12 @@ func (b *Bridge) Discover(ctx context.Context) error {
 		return err
 	}
 	log.Println(string(pay))
-	topic, err := disc.Topic(b.cfg.Discovery.Prefix)
+	topic, err := disc.Topic(b.discoveryCfg.Prefix)
 	if err != nil {
 		log.Error("Unable to get discovery topic", err)
 		return err
 	}
-	t := b.client.Publish(topic, b.cfg.Discovery.QoS, b.cfg.Discovery.Retained, pay)
+	t := b.client.Publish(topic, b.discoveryCfg.QoS, b.discoveryCfg.Retained, pay)
 	select {
 	case <-ctx.Done():
 		return nil

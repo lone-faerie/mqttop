@@ -20,9 +20,8 @@ import (
 )
 
 var (
-	cfgPath  []string
-	writeCfg bool
-	cfg      *config.Config
+	cfgPath []string
+	cfg     *config.Config
 )
 
 var (
@@ -49,11 +48,7 @@ var (
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 			initConfig()
 			cfg, err = config.Load(cfgPath...)
-			if errors.Is(err, os.ErrNotExist) {
-				writeCfg = true
-				err = nil
-			}
-			if err != nil {
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
 				return
 			}
 			if err = flagsToConfig(cfg, cmd, args); err != nil {
@@ -88,8 +83,8 @@ func initConfig() {
 	if len(cfgPath) > 0 {
 		return
 	}
-	cfgFile := os.Getenv("MQTTOP_CONFIG_PATH")
-	if cfgFile != "" {
+	cfgFile, ok := os.LookupEnv("MQTTOP_CONFIG_PATH")
+	if ok {
 		cfgPath = strings.Split(cfgFile, ",")
 		return
 	}
@@ -199,11 +194,9 @@ func runBridge(cmd *cobra.Command, _ []string) {
 		log.Error("Not connected.", err)
 		return
 	}
+	cfg = nil
 	defer func() {
 		cancel()
-		if writeCfg {
-			cfg.Write(cfgPath[0])
-		}
 		bridge.Disconnect()
 		log.Info("Done")
 	}()

@@ -30,22 +30,22 @@ type Discovery struct {
 	Device     *Device              `json:"dev"`
 	Components map[string]Component `json:"cmps"`
 
+	cfg *config.DiscoveryConfig
+
 	AvailabilityTopic string `json:"-"`
 	ObjectID          string `json:"-"`
 	NodeID            string `json:"-"`
 }
 
-func New(cfg *config.Config, cmps ...Discoverer) (*Discovery, error) {
+func New(cfg *config.DiscoveryConfig, cmps ...Discoverer) (*Discovery, error) {
 	dev, err := NewDevice()
 	if err != nil {
 		return nil, err
 	}
-	switch cfg.Discovery.DeviceName {
+	switch cfg.DeviceName {
 	case "", "hostname":
-	case "username":
-		dev.Name = cfg.MQTT.Username
 	default:
-		dev.Name = cfg.Discovery.DeviceName
+		dev.Name = cfg.DeviceName
 	}
 	if dev.Name == "" {
 		dev.Name = "Mqttop"
@@ -55,8 +55,8 @@ func New(cfg *config.Config, cmps ...Discoverer) (*Discovery, error) {
 		Origin:            NewOrigin(),
 		Device:            dev,
 		Components:        make(map[string]Component, len(cmps)),
-		NodeID:            cfg.Discovery.NodeID,
-		AvailabilityTopic: cfg.Discovery.Availability,
+		NodeID:            cfg.NodeID,
+		AvailabilityTopic: cfg.Availability,
 	}
 	if d.NodeID == "" {
 		d.NodeID = "mqttop"
@@ -85,7 +85,7 @@ func (d *Discovery) Topic(prefix string) (string, error) {
 	return strings.Join(elems, "/"), nil
 }
 
-func (d *Discovery) SetAvaialability(avail Component) {
+func (d *Discovery) SetAvailability(avail Component) {
 	for cmp := range d.Components {
 		d.Components[cmp][Availability] = avail
 	}

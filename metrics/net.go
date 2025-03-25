@@ -38,7 +38,7 @@ func (iface *NetInterface) Running() bool {
 type Net struct {
 	interfaces map[string]*NetInterface
 
-	cfg      *config.Config
+	cfg      *config.NetConfig
 	interval time.Duration
 	tick     *time.Ticker
 	topic    string
@@ -54,7 +54,7 @@ type Net struct {
 }
 
 func NewNet(cfg *config.Config) (*Net, error) {
-	n := &Net{cfg: cfg}
+	n := &Net{cfg: &cfg.Net}
 	if err := n.parseInterfaces(true); err != nil {
 		return nil, errNotSupported(n.Type(), err)
 	}
@@ -94,10 +94,10 @@ func (n *Net) skipInterface(iface string) bool {
 	//	if slices.Contains(n.cfg.Net.Include, iface) {
 	//		return false
 	//	}
-	if slices.Contains(n.cfg.Net.Exclude, iface) {
+	if slices.Contains(n.cfg.Exclude, iface) {
 		return true
 	}
-	if !n.cfg.Net.OnlyPhysical && n.cfg.Net.IncludeBridge {
+	if !n.cfg.OnlyPhysical && n.cfg.IncludeBridge {
 		return false
 	}
 	nd, err := sysfs.NetDevice(iface)
@@ -107,11 +107,11 @@ func (n *Net) skipInterface(iface string) bool {
 	}
 	defer nd.Close()
 	var skip bool
-	if n.cfg.Net.OnlyPhysical {
+	if n.cfg.OnlyPhysical {
 		b := nd.Contains("device")
 		skip = skip || !b
 	}
-	if !n.cfg.Net.IncludeBridge {
+	if !n.cfg.IncludeBridge {
 		b := nd.Contains("bridge")
 		skip = skip || b
 	}
@@ -144,12 +144,12 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 				ratestr string
 				include bool
 			)
-			for j := range n.cfg.Net.Include {
-				if n.cfg.Net.Include[j].Interface != ifname {
+			for j := range n.cfg.Include {
+				if n.cfg.Include[j].Interface != ifname {
 					continue
 				}
-				ifname = n.cfg.Net.Include[j].FormatName(ifname)
-				ratestr = n.cfg.Net.Include[j].RateUnit
+				ifname = n.cfg.Include[j].FormatName(ifname)
+				ratestr = n.cfg.Include[j].RateUnit
 				include = true
 				break
 			}
@@ -161,7 +161,7 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 			}
 			if firstRun {
 				if ratestr == "" {
-					ratestr = n.cfg.Net.RateUnit
+					ratestr = n.cfg.RateUnit
 				}
 				rate, err := byteutil.ParseRate(ratestr)
 				if err != nil {
@@ -301,7 +301,7 @@ func (n *Net) AppendText(b []byte) ([]byte, error) {
 	b = append(b, '{')
 	first := true
 	for name, iface := range n.interfaces {
-		if n.cfg.Net.OnlyRunning && !iface.Running() {
+		if n.cfg.OnlyRunning && !iface.Running() {
 			log.Debug("AppendText", name, "not running")
 			continue
 		}

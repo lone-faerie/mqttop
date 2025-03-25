@@ -30,26 +30,27 @@ type Config struct {
 	FormatSize func(v int, bits bool) string `yaml:"-"`
 }
 
+var defaultCfg = &Config{
+	Interval:  2 * time.Second,
+	MQTT:      defaultMQTT,
+	Discovery: defaultDiscovery,
+	CPU:       defaultCPU,
+	Memory:    defaultMemory,
+	Disks:     defaultDisks,
+	Net:       defaultNet,
+	Battery:   defaultBattery,
+	GPU:       defaultGPU,
+}
+
 func Default() *Config {
-	cfg := &Config{
-		Interval:  2 * time.Second,
-		MQTT:      defaultMQTT,
-		Discovery: defaultDiscovery,
-		CPU:       defaultCPU,
-		Memory:    defaultMemory,
-		Disks:     defaultDisks,
-		Net:       defaultNet,
-		Battery:   defaultBattery,
-		GPU:       defaultGPU,
-	}
-	cfg.Expand()
+	cfg := defaultCfg
 	cfg.load()
 	return cfg
 }
 
 func Load(file ...string) (cfg *Config, err error) {
 	log.Info("Loading config", "path", file)
-	cfg = Default()
+	cfg = defaultCfg
 	if _, err = os.Stat(file[0]); err != nil {
 		return
 	}
@@ -58,7 +59,6 @@ func Load(file ...string) (cfg *Config, err error) {
 	if err = yaml.NewDecoder(r).Decode(cfg); err != nil {
 		return
 	}
-
 	err = cfg.load()
 	log.Info("Config loaded")
 	return
@@ -77,6 +77,7 @@ func (cfg *Config) load() (err error) {
 		v = reflect.ValueOf(cfg).Elem()
 		n = v.NumField()
 	)
+	expand(v)
 	for i := 0; i < n; i++ {
 		f := v.Field(i)
 		if f.Kind() != reflect.Slice {
@@ -114,6 +115,9 @@ func expand(v reflect.Value) {
 		for i := 0; i < n; i++ {
 			expand(v.Index(i))
 		}
+
+	case reflect.Pointer:
+		expand(v.Elem())
 	}
 }
 
