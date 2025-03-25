@@ -24,6 +24,12 @@ FROM scratch
 
 ARG VERSION
 
+LABEL org.opencontainers.image.title="mqttop" \
+	org.opencontainers.image.vendor="lone-faerie" \
+	org.opencontainers.image.license="AGPL-3.0" \
+	org.opencontainers.image.version="${VERSION}" \
+	org.opencontainers.image.source="https://github.com/lone-faerie/mqttop"
+
 WORKDIR /app
 
 COPY --link --from=build /bin/mqttop /app/mqttop
