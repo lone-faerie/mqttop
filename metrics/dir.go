@@ -289,6 +289,7 @@ func (d *Dir) startWatch(ctx context.Context) error {
 
 func (d *Dir) Start(ctx context.Context) (err error) {
 	if d.interval == 0 {
+		log.Warn("Dir interval is 0, not starting", "path", d.path)
 		return
 	}
 	if d.watched != nil {

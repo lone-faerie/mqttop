@@ -312,6 +312,7 @@ func (c *CPU) loop(ctx context.Context) {
 
 func (c *CPU) Start(ctx context.Context) (err error) {
 	if c.interval == 0 {
+		log.Warn("CPU interval is 0, not starting")
 		return
 	}
 	c.once.Do(func() {
@@ -325,7 +326,6 @@ func (c *CPU) Start(ctx context.Context) (err error) {
 func (c *CPU) updateUsage() error {
 	stat, err := procfs.Stat()
 	if err != nil {
-		log.Println(err)
 		return err
 	}
 	defer stat.Close()
@@ -340,7 +340,6 @@ func (c *CPU) updateUsage() error {
 			break
 		}
 		if err != nil {
-			log.Println(err)
 			return err
 		}
 		if len(line) == 0 {
@@ -403,6 +402,7 @@ func (c *CPU) Update() (err error) {
 	defer c.mu.Unlock()
 	if c.flags.Has(cpuUsage) {
 		if err := c.updateUsage(); err != nil {
+			log.Warn("can't update CPU usage", "cause", err)
 			c.flags &^= cpuUsage
 		}
 	}
@@ -428,34 +428,6 @@ func (c *CPU) Stop() {
 		c.stop()
 	}
 	c.mu.Unlock()
-}
-
-func (c *cpuCore) writeString(b *strings.Builder, flags cpuFlag) {
-	fmt.Fprintf(
-		b,
-		"\nprocessor %d:\n  core id: %d",
-		c.logical,
-		c.physical,
-	)
-	if c.temp != nil {
-		fmt.Fprintf(
-			b,
-			"\n  sensor: %s",
-			c.temp.Label,
-		)
-	}
-	if flags.Has(cpuFrequency) {
-		fmt.Fprintf(
-			b,
-			"\n  min freq: %.3f\n  max freq: %.3f\n  base freq: %.3f",
-			float64(c.freq.Min)/1000000.0,
-			float64(c.freq.Max)/1000000.0,
-			float64(c.freq.Base)/1000000.0,
-		)
-		if freq, err := c.freq.Read(); err == nil {
-			fmt.Fprintf(b, "\n  curr freq: %.3f", float64(freq)/1000000.0)
-		}
-	}
 }
 
 func (c *CPU) String() string {
@@ -516,9 +488,10 @@ func (c *CPU) AppendText(b []byte) ([]byte, error) {
 }
 
 func (c *CPU) SelectAuto() (temp, freq int64) {
-	if c.temp != nil {
-		temp = c.temp.Value()
+	if c.temp == nil {
+		return c.SelectFirst()
 	}
+	temp = c.temp.Value()
 	if len(c.cores) > 0 {
 		freq = c.cores[0].freq.Curr()
 	}

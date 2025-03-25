@@ -152,6 +152,7 @@ func (m *Memory) loop(ctx context.Context) {
 
 func (m *Memory) Start(ctx context.Context) (err error) {
 	if m.interval == 0 {
+		log.Warn("Memory interval is 0, not starting")
 		return
 	}
 	m.once.Do(func() {

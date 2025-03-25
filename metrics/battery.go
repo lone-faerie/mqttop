@@ -198,6 +198,7 @@ func (b *Battery) loop(ctx context.Context) {
 
 func (b *Battery) Start(ctx context.Context) (err error) {
 	if b.interval == 0 {
+		log.Warn("Battery interval is 0, not starting")
 		return
 	}
 	b.once.Do(func() {

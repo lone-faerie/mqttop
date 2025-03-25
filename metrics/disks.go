@@ -163,6 +163,7 @@ func (d *Disks) loop(ctx context.Context) {
 
 func (d *Disks) Start(ctx context.Context) (err error) {
 	if d.interval == 0 {
+		log.Warn("Disks interval is 0, not starting")
 		return
 	}
 	d.once.Do(func() {
@@ -195,11 +196,11 @@ func (d *Disks) rescan(firstRun bool) error {
 			if dcfg != nil && dcfg.SizeUnit != "" {
 				size, err := byteutil.ParseSize(dcfg.SizeUnit)
 				if err != nil {
-					size = byteutil.SizeOf(disk.total)
+					size = byteutil.SizeOf(disk.total >> 2)
 				}
 				disk.size = size
 			} else {
-				disk.size = byteutil.SizeOf(disk.total)
+				disk.size = byteutil.SizeOf(disk.total >> 2)
 			}
 			if firstRun {
 				disk.total = 0
@@ -318,7 +319,6 @@ func (d *Disk) Update() (err error) {
 	d.total = total
 	d.free = free
 	d.used = used
-	d.size = byteutil.SizeOf(d.total >> 2)
 
 	if !d.showIO {
 		return

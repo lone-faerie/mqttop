@@ -76,7 +76,7 @@ func New(cfg *config.Config) *Bridge {
 		"mqttop/bridge/status", "offline", 1, true,
 	)
 	client := mqtt.NewClient(opts)
-	//client := NewMockClient(opts, false)
+	//client := NewMockClient(opts, true)
 	return &Bridge{
 		client: client,
 		m:      metrics.New(cfg),
@@ -95,10 +95,7 @@ func (b *Bridge) handleMetric(i int, m metrics.Metric) mqtt.MessageHandler {
 				}
 			}()
 		case strings.HasSuffix(msg.Topic(), "stop"):
-			go func() {
-				m.Stop()
-				b.m[i] = nil
-			}()
+			go m.Stop()
 		}
 	}
 }
@@ -148,6 +145,50 @@ func (b *Bridge) Start(ctx context.Context) {
 	})
 }
 
+func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) (done bool) {
+	if m.Topic() == "" {
+		return
+	}
+	if err := m.Start(ctx); err != nil {
+		log.Error("Error starting "+m.Type(), err)
+		b.states.Set(m.Topic(), false)
+		return
+	}
+	b.states.Set(m.Topic(), true)
+	t := b.client.SubscribeMultiple(metricTopics(m), b.handleMetric(i, m))
+	select {
+	case <-ctx.Done():
+		return true
+	case <-t.Done():
+	}
+	if err := t.Error(); err != nil {
+		log.Error("Error subscribing to "+m.Topic(), err)
+		return
+	}
+	b.wg.Add(1)
+	go func(idx int, metric metrics.Metric) {
+		defer b.states.Delete(metric.Topic())
+		defer func() {
+			metric.Stop()
+			b.mu.Lock()
+			b.m[idx] = nil
+			b.mu.Unlock()
+		}()
+		defer b.wg.Done()
+		ch := metric.Updated()
+		log.Info(metric.Type() + " started")
+		for err := range ch {
+			if err == nil {
+				b.updates <- metric
+			} else if err != metrics.ErrNoChange {
+				log.Warn("Error updating metric", "metric", metric.Type(), "err", err)
+			}
+		}
+		log.Info(metric.Type() + " done")
+	}(i, m)
+	return
+}
+
 // start starts listening to the metrics.
 func (b *Bridge) start(ctx context.Context) {
 	b.ready = make(chan struct{})
@@ -156,50 +197,12 @@ func (b *Bridge) start(ctx context.Context) {
 	ctx, b.cancel = context.WithCancel(ctx)
 	go func() {
 		defer close(b.ready)
-	loop:
 		for i, m := range b.m {
-			if m.Topic() == "" {
-				continue
+			if b.startMetric(ctx, i, m) {
+				break
 			}
-			if err := m.Start(ctx); err != nil {
-				log.Error("Error starting "+m.Type(), err)
-				b.states.m[m.Topic()] = false
-				continue
-			}
-			b.states.m[m.Topic()] = true
-			t := b.client.SubscribeMultiple(metricTopics(m), b.handleMetric(i, m))
-			select {
-			case <-ctx.Done():
-				break loop
-			case <-t.Done():
-			}
-			if err := t.Error(); err != nil {
-				log.Error("Error subscribing to "+m.Topic(), err)
-				continue
-			}
-			b.wg.Add(1)
-			go func(idx int, metric metrics.Metric) {
-				defer b.states.Delete(metric.Topic())
-				defer func() {
-					metric.Stop()
-					b.mu.Lock()
-					b.m[idx] = nil
-					b.mu.Unlock()
-				}()
-				defer b.wg.Done()
-				ch := metric.Updated()
-				log.Info(metric.Type() + " started")
-				for err := range ch {
-					if err == nil {
-						b.updates <- metric
-					} else if err != metrics.ErrNoChange {
-						log.Warn("Error updating metric", "metric", metric.Type(), "err", err)
-					}
-				}
-				log.Info(metric.Type() + " done")
-			}(i, m)
 		}
-		if birth, err := b.states.MarshalJSON(); err == nil {
+		if birth, err := json.Marshal(&b.states); err == nil {
 			t := b.client.Publish("mqttop/bridge/status", 0, true, birth)
 			select {
 			case <-ctx.Done():
@@ -250,6 +253,7 @@ func (b *Bridge) Disconnect() {
 	b.wg.Wait()
 	close(b.updates)
 	time.Sleep(time.Second)
+	log.Debug("Disconnected")
 }
 
 func (b *Bridge) waitDiscover(ctx context.Context) error {

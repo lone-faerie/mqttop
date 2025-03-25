@@ -219,4 +219,5 @@ func runBridge(cmd *cobra.Command, _ []string) {
 	}
 
 	<-c
+	log.Debug("Received signal")
 }

@@ -5,11 +5,12 @@ package mqttop
 import (
 	"encoding/json"
 	"io"
-	"log"
 	"os"
 	"sync"
 
 	"github.com/eclipse/paho.mqtt.golang"
+
+	"github.com/lone-faerie/mqttop/log"
 )
 
 type MockClient struct {
@@ -62,7 +63,7 @@ func (c *MockClient) Publish(topic string, qos byte, retained bool, payload inte
 	e.SetIndent("", "  ")
 	err := e.Encode(map[string]json.RawMessage{topic: json.RawMessage(p)})
 	if err != nil {
-		log.Println("Error encoding", topic, err)
+		log.Error("Error encoding "+topic, err)
 	}
 	c.w.Write([]byte{'\n', '\n'})
 	if s, ok := c.w.(syncer); ok {
@@ -72,10 +73,12 @@ func (c *MockClient) Publish(topic string, qos byte, retained bool, payload inte
 }
 
 func (c *MockClient) Subscribe(topic string, qos byte, callback mqtt.MessageHandler) mqtt.Token {
+	go callback(c, nil)
 	return &mqtt.DummyToken{}
 }
 
 func (c *MockClient) SubscribeMultiple(filters map[string]byte, callback mqtt.MessageHandler) mqtt.Token {
+	go callback(c, nil)
 	return &mqtt.DummyToken{}
 }
 

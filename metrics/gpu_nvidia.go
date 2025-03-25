@@ -197,6 +197,7 @@ func (g *NvidiaGPU) loop(ctx context.Context) {
 
 func (g *NvidiaGPU) Start(ctx context.Context) error {
 	if g.interval == 0 {
+		log.Warn("GPU interval is 0, not starting")
 		return nil
 	}
 	g.once.Do(func() {

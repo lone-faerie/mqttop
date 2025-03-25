@@ -246,6 +246,7 @@ func (n *Net) loop(ctx context.Context) {
 
 func (n *Net) Start(ctx context.Context) (err error) {
 	if n.interval == 0 {
+		log.Warn("Network interval is 0, not starting")
 		return
 	}
 	n.once.Do(func() {
