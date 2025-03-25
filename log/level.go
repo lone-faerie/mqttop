@@ -40,7 +40,7 @@ const (
 	LevelInfo     = Level(slog.LevelInfo)
 	LevelWarn     = Level(slog.LevelWarn)
 	LevelError    = Level(slog.LevelError)
-	LevelDisabled = Level(1<<31) - 1
+	LevelDisabled = Level(1<<31 - 1)
 )
 
 // String returns a name for the level.
