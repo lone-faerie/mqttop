@@ -194,7 +194,6 @@ func runBridge(cmd *cobra.Command, _ []string) {
 		log.Error("Not connected.", err)
 		return
 	}
-	cfg = nil
 	defer func() {
 		cancel()
 		bridge.Disconnect()
@@ -210,6 +209,7 @@ func runBridge(cmd *cobra.Command, _ []string) {
 	case <-c:
 		return
 	}
+	cfg = nil
 
 	<-c
 	log.Debug("Received signal")
