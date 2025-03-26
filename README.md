@@ -15,7 +15,7 @@ Any string config field may be set to an environment variable `$<variable>` or D
 | `disks` | [DisksConfig](#disksconfig) | | Disks metric configuration |
 | `net` | [NetConfig](#netconfig) | | Network metric configuration |
 | `battery` | [BatteryConfig](#batteryconfig) | | Battery metric configuration |
-| `dirs` | [][DirConfig](#dirconfig) | | List of directory metric configurations |
+| `dirs` | list [DirConfig](#dirconfig) | | List of directory metric configurations |
 | `gpu` | [GPUConfig](#gpuconfig) | | GPU metric configuration |
 
 ### MQTTConfig
@@ -86,7 +86,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `use_fstab` | bool | true | Use /etc/fstab to find disks |
 | `rescan` | bool or duration | | Interval to rescan for disks, if true will use update interval, else the given interval |
 | `show_io` | bool | true | Include disk IO in metrics |
-| `disk` | [][DiskConfig](#diskconfig) | | List of individual disk configurations |
+| `disk` | list [DiskConfig](#diskconfig) | | List of individual disk configurations |
 
 ### DiskConfig
 | Field | Type | Default | Description |
@@ -112,8 +112,8 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `include_bridge` | bool | false | Include bridge interfaces |
 | `rescan` | bool or duration | | Interval to rescan for interfaces, if true will use update interval, else the given interval |
 | `rate_unit` | string | | Rate unit to use for network throughput, if blank, will be automatically determined |
-| `include` | [][NetIfaceConfig](#netifaceconfig),[]string | | List of network interface configurations to explicitly include, if string will be name of interface |
-| `exclude` | []string | | List of network interfaces to explicitly exclude |
+| `include` | list [NetIfaceConfig](#netifaceconfig), list string | | List of network interface configurations to explicitly include, if string will be name of interface |
+| `exclude` | list string | | List of network interfaces to explicitly exclude |
 
 ### NetIfaceConfig
 | Field | Type | Default | Description |
