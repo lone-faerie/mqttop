@@ -13,7 +13,7 @@ COPY . .
 
 # Set build environment variables
 ENV BIN_OUT_DIR="/bin" \
-	GOOS=linux \
+	GOOS=linux
 
 # Build
 RUN make build

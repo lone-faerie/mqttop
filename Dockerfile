@@ -14,7 +14,7 @@ COPY . .
 
 # Set build environment variables
 ENV BIN_OUT_DIR="/bin" \
-	GOOS=linux
+	GOOS=linux \
 	GO_BUILD_TAGS=nogpu
 
 # Build
