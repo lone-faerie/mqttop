@@ -21,10 +21,10 @@ Any string config field may be set to an environment variable `$<variable>` or D
 ### MQTTConfig
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `broker` | string | $MQTTOP_BROKER_ADDRESS | Address of the MQTT broker |
+| `broker` | string | "$MQTTOP_BROKER_ADDRESS" | Address of the MQTT broker |
 | `client_id` | string | | Client ID used when connecting to the broker |
-| `username` | string | $MQTTOP_BROKER_USERNAME | Username used to connect to the broker |
-| `password` | string | $MQTTOP_BROKER_PASSWORD | Password used to connect to the broker |
+| `username` | string | "$MQTTOP_BROKER_USERNAME" | Username used to connect to the broker |
+| `password` | string | "$MQTTOP_BROKER_PASSWORD" | Password used to connect to the broker |
 | `keep_alive` | duration | 30s | Amount of time to wait before sending a PING to the broker |
 | `cert_file` | string | | Path to the cert file for SSL, disabled if blank |
 | `key_file` | string | | Path to the key file for SSL, disabled if blank |
@@ -33,7 +33,7 @@ Any string config field may be set to an environment variable `$<variable>` or D
 | `ping_timeout` | duration | 10s | Amount of time to wait after sending a PING before deciding to timeout |
 | `write_timeout` | duration | 0 | Amount of time to wait after publishing before deciding to timeout, 0 means never timeout |
 | `birth_lwt_enabled` | bool | true | Enable/disable birth and LWT message |
-| `birth_lwt_topic` | string | mqttop/bridge/status | Topic to publish birth and LWT message to |
+| `birth_lwt_topic` | string | "mqttop/bridge/status" | Topic to publish birth and LWT message to |
 | `log_level` | level | DISABLED | Log level to provide to the MQTT client |
 See https://pkg.go.dev/github.com/eclipse/paho.mqtt.golang#ClientOptions
 
@@ -41,7 +41,7 @@ See https://pkg.go.dev/github.com/eclipse/paho.mqtt.golang#ClientOptions
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enabled/disable MQTT discovery |
-| `prefix` | string | homeassistant | Prefix of discovery topic |
+| `prefix` | string | "homeassistant" | Prefix of discovery topic |
 | `device_name` | string | | Name of device used for discovery, if blank or "hostname" will use device hostname, if "username" will use MQTT username |
 | `node_id` | string | | Optional node ID to use for discovery |
 | `availability` | string | | Topic to publish availability to, if blank will use MQTT `birth_lwt_topic` |
@@ -63,17 +63,17 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
 | `interval` | duration | | Update interval of the metric, if 0 will be top-level `interval`
-| `topic` | string | mqttop/metric/cpu | Topic to publish updates to |
+| `topic` | string | "mqttop/metric/cpu" | Topic to publish updates to |
 | `name` | string | | Custom name to use for the CPU |
 | `name_template` | string | | Template to use for the CPU name, will override `name` |
-| `selection_mode` | string | auto | Mode used to select overall CPU temperature and frequency, one of auto, first, average, max, min, random |
+| `selection_mode` | string | `auto` | Mode used to select overall CPU temperature and frequency, one of `auto`, `first`, `average`, `max`, `min`, `random` |
 
 ### MemoryConfig
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
 | `interval` | duration | | Update interval of the metric, if 0 will be top-level `interval` |
-| `topic` | string | mqttop/metric/cpu | Topic to publish updates to |
+| `topic` | string | "mqttop/metric/memory" | Topic to publish updates to |
 | `size_unit` | string | | Size unit to use for memory size, if blank, will be automatically determined |
 | `include_swap` | bool | true | Include swap in the metrics |
 
@@ -82,7 +82,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
 | `interval` | duration | | Update interval of the metric, if 0 will be top-level `interval` |
-| `topic` | string | mqttop/metric/cpu | Topic to publish updates to |
+| `topic` | string | "mqttop/metric/disks" | Topic to publish updates to |
 | `use_fstab` | bool | true | Use /etc/fstab to find disks |
 | `rescan` | bool or duration | | Interval to rescan for disks, if true will use update interval, else the given interval |
 | `show_io` | bool | true | Include disk IO in metrics |
@@ -93,7 +93,6 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
 | `interval` | duration | | Update interval of the metric, if 0 will be top-level `interval` |
-| `topic` | string | mqttop/metric/cpu | Topic to publish updates to |
 | `exclude` | bool | false | Exclude the disk from metrics |
 | `name` | string | | Custom name to use for the disk |
 | `name_template` | string | | Template to use for the disk name, will override `name` |
@@ -106,7 +105,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
 | `interval` | duration | | Update interval of the metric, if 0 will be top-level `interval` |
-| `topic` | string | mqttop/metric/cpu | Topic to publish updates to |
+| `topic` | string | "mqttop/metric/net" | Topic to publish updates to |
 | `only_physical` | bool | false | Only include physical network interfaces |
 | `only_running` | bool | false | Only include running network interfaces |
 | `include_bridge` | bool | false | Include bridge interfaces |
@@ -128,7 +127,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
 | `interval` | duration | | Update interval of the metric, if 0 will be top-level `interval` |
-| `topic` | string | mqttop/metric/cpu | Topic to publish updates to |
+| `topic` | string | "mqttop/metric/battery" | Topic to publish updates to |
 | `time_format` | string | | Format used to represent time remaining |
 
 ### DirConfig
@@ -136,7 +135,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
 | `interval` | duration | | Update interval of the metric, if 0 will be top-level `interval` |
-| `topic` | string | mqttop/metric/cpu | Topic to publish updates to |
+| `topic` | string | "mqttop/metric/dir/<dir path>" | Topic to publish updates to |
 | `name` | string | | Custom name to use for the directory |
 | `name_template` | string | | Template to use for the directory name, will override `name` |
 | `path` | string | | Path to the directory |
@@ -149,7 +148,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
 | `interval` | duration | | Update interval of the metric, if 0 will be top-level `interval` |
-| `topic` | string | mqttop/metric/cpu | Topic to publish updates to |
+| `topic` | string | "mqttop/metric/gpu" | Topic to publish updates to |
 | `name` | string | | Custom name to use for the directory |
 | `name_template` | string | | Template to use for the directory name, will override `name` |
 | `platform` | string | | Platform of GPU to use, currently only supports nvidia |
