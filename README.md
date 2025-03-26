@@ -1,8 +1,45 @@
 # Mqttop
 Provide system metrics over MQTT
 
+## Installation
+There are two provided docker images, one with GPU support and one without. To monitor the host metrics, mount the root directory and set the environment variable `$MQTTOP_ROOTFS_PATH` to the mount point in the container, and to monitor the host network metrics, set `network_mode` to `host`. In order for GPU support to work, you must have the [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) installed.
+
+### docker-compose.yml
+```yaml
+services:
+  mqttop:
+    image: mqttop:latest
+    environment:
+      - MQTTOP_ROOTFS_PATH=/host
+    volumes:
+      - "./config.yml:/config/config.yml"
+      - "/:/host:ro"
+    network_mode: host
+```
+
+### docker-compose.yml - GPU Support
+```yaml
+services:
+  mqttop:
+    image: mqttop:latest
+    environment:
+      - MQTTOP_ROOTFS_PATH=/host
+    volumes:
+      - "./config.yml:/config/config.yml"
+      - "/:/host:ro"
+    network_mode: host
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
+
 ## Configuration
-Any string config field may be set to an environment variable `$<variable>` or Docker secret `!secret <secret>`.
+Configuration files are stored in yaml format. Configs can be broken up into multiple files and may be passed as either a list of files or directories. The path to config files is either the path(s) passed as arguments, the value of $MQTTOP_CONFIG_PATH, $XDG_CONFIG_HOME/mqttop.yaml, or $HOME/.config/mqttop.yaml. The default path for config files in the docker container is /config/config.yml Durations are parsed using Go's [time.ParseDuration](https://pkg.go.dev/time#ParseDuration) and any strings may be set to an environment variable `$<variable>` or Docker secret `!secret <secret>`.
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
@@ -35,6 +72,7 @@ Any string config field may be set to an environment variable `$<variable>` or D
 | `birth_lwt_enabled` | bool | true | Enable/disable birth and LWT message |
 | `birth_lwt_topic` | string | "mqttop/bridge/status" | Topic to publish birth and LWT message to |
 | `log_level` | level | DISABLED | Log level to provide to the MQTT client |
+
 See https://pkg.go.dev/github.com/eclipse/paho.mqtt.golang#ClientOptions
 
 ### DiscoveryConfig
@@ -49,6 +87,7 @@ See https://pkg.go.dev/github.com/eclipse/paho.mqtt.golang#ClientOptions
 | `qos` | int | QoS of discovery payload |
 | `wait_topic` | string | | Topic to wait for payload on before publishing discovery, if blank will not wait |
 | `wait_payload` | string | | Payload to wait for from `wait_topic` before publishing discovery, if blank will wait for any payload |
+
 See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 
 ### LogConfig
