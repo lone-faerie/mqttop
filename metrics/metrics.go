@@ -1,3 +1,4 @@
+// Package metrics provides the implementations of supported system metrics.
 package metrics
 
 import (
@@ -10,7 +11,7 @@ import (
 	"github.com/lone-faerie/mqttop/config"
 )
 
-// Metric is the interface for providing metrics over mqtt.
+// Metric is the interface for providing a metric over MQTT.
 type Metric interface {
 	// Type returns a constant string representing the type of the metric.
 	Type() string

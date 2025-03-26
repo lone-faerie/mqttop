@@ -15,6 +15,9 @@ import (
 	"github.com/lone-faerie/mqttop/internal/procfs"
 )
 
+// Memory implements the [Metric] interface to provide the system memory
+// metrics. This includes the total, free, available, and used memory,
+// and the total, free, and used swap memory.
 type Memory struct {
 	total     uint64
 	free      uint64
@@ -39,6 +42,9 @@ type Memory struct {
 	ch   chan error
 }
 
+// NewMemory returns a new [Memory] initialized from cfg. If there is any error
+// encountered while initializing the Memory, a non-nil error that wraps [ErrNotSupported]
+// is returned.
 func NewMemory(cfg *config.Config) (*Memory, error) {
 	m := &Memory{includeSwap: cfg.Memory.IncludeSwap}
 	if err := m.parseInfo(); err != nil {
@@ -108,14 +114,17 @@ func (m *Memory) parseInfo() error {
 	return nil
 }
 
+// Type returns the metric type, "memory".
 func (m *Memory) Type() string {
 	return "memory"
 }
 
+// Topic returns the topic to publish memory metrics to.
 func (m *Memory) Topic() string {
 	return m.topic
 }
 
+// SetInterval sets the update interval for the metric.
 func (m *Memory) SetInterval(d time.Duration) {
 	m.mu.Lock()
 	if m.tick != nil && d != m.interval {
@@ -150,6 +159,8 @@ func (m *Memory) loop(ctx context.Context) {
 	}
 }
 
+// Start starts the memory updating. If ctx is cancelled or
+// times out, the metric will stop and may not be restarted.
 func (m *Memory) Start(ctx context.Context) (err error) {
 	if m.interval == 0 {
 		log.Warn("Memory interval is 0, not starting")
@@ -163,6 +174,9 @@ func (m *Memory) Start(ctx context.Context) (err error) {
 	return
 }
 
+// Update forces the memory metric to update. The returned error will not
+// be sent on the channel returned by [Memory.Updated] unlike updates that
+// happen automatically every update interval.
 func (m *Memory) Update() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -216,10 +230,15 @@ func (m *Memory) Update() error {
 	return nil
 }
 
+// Updated returns the channel that updates will be sent on. A received value
+// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
+// error is the first error encountered during updating and indicates a failed update.
 func (m *Memory) Updated() <-chan error {
 	return m.ch
 }
 
+// Stop stops the CPU from continuing to update. Once stopped, the CPU
+// may not be restarted.
 func (m *Memory) Stop() {
 	m.mu.Lock()
 	if m.stop != nil {
@@ -228,6 +247,7 @@ func (m *Memory) Stop() {
 	m.mu.Unlock()
 }
 
+// String implements [fmt.Stringer]
 func (m *Memory) String() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -237,10 +257,7 @@ func (m *Memory) String() string {
 	return b.String()
 }
 
-func (m *Memory) MarshalJSON() ([]byte, error) {
-	return m.AppendText(nil)
-}
-
+// AppendText implements [encoding/TextAppender]
 func (m *Memory) AppendText(b []byte) ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -263,4 +280,9 @@ func (m *Memory) AppendText(b []byte) ([]byte, error) {
 		b = byteutil.AppendSize(b, m.swapFree, m.swapSize)
 	}
 	return append(b, '}'), nil
+}
+
+// MarshalJSON implements [json.Marshaler] and is equivalent to [CPU.AppendText](nil).
+func (m *Memory) MarshalJSON() ([]byte, error) {
+	return m.AppendText(nil)
 }

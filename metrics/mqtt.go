@@ -10,20 +10,6 @@ import (
 	"github.com/lone-faerie/mqttop/internal/byteutil"
 )
 
-type Publisher interface {
-	Publish(mqtt.Client) mqtt.Token
-}
-
-type Subscriber interface {
-	Subscribe(mqtt.Client) mqtt.Token
-}
-
-type MQTTMetric interface {
-	Metric
-	Publisher
-	Subscriber
-}
-
 func availabilityTemplate(topic string) string {
 	return fmt.Sprintf(
 		"{{ iif(value_json[%q]|default, 'online', 'offline') if value_json is defined else value }}",
@@ -32,6 +18,9 @@ func availabilityTemplate(topic string) string {
 }
 
 // Battery Discovery
+
+// Discover implements [discovery.Discoverer]. Adds sensors for battery state,
+// battery level, battery power, and a binary sensor for battery charging.
 func (b *Battery) Discover(d *discovery.Discovery) {
 	id := d.Origin.Name + "_battery_state"
 	avail := availabilityTemplate(b.Topic())
@@ -103,6 +92,7 @@ func (b *Battery) Discover(d *discovery.Discovery) {
 }
 
 // CPU Discovery
+
 func (c *CPU) discover(core int, d *discovery.Discovery) {
 	var id, name, template string
 	avail := availabilityTemplate(c.Topic())
@@ -182,6 +172,8 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 	}
 }
 
+// Discover implements [discovery.Discoverer]. Adds sensors for cpu and core usage,
+// cpu and core temperature, and cpu and core frequency.
 func (c *CPU) Discover(d *discovery.Discovery) {
 	c.discover(-1, d)
 	for i := range c.cores {
@@ -190,6 +182,8 @@ func (c *CPU) Discover(d *discovery.Discovery) {
 }
 
 // Directory Discovery
+
+// Discover implements [discovery.Discoverer]. Adds sensors for directory size.
 func (d *Dir) Discover(disc *discovery.Discovery) {
 	id := disc.Origin.Name + "_dir_" + d.Slug()
 	avail := availabilityTemplate(d.Topic())
@@ -211,6 +205,7 @@ func (d *Dir) Discover(disc *discovery.Discovery) {
 }
 
 // Disk Discovery
+
 func (d *Disk) discover(dsks *Disks, disc *discovery.Discovery) {
 	id := disc.Origin.Name + "_disk_" + d.Name
 	name := "Disk " + d.Name
@@ -268,6 +263,8 @@ func (d *Disk) discover(dsks *Disks, disc *discovery.Discovery) {
 	}
 }
 
+// Discover implements [discovery.Discoverer]. Adds sensors for disk usage, disk reads,
+// and disk writes.
 func (d *Disks) Discover(disc *discovery.Discovery) {
 	for _, dsk := range d.disks {
 		dsk.discover(d, disc)
@@ -275,6 +272,10 @@ func (d *Disks) Discover(disc *discovery.Discovery) {
 }
 
 // Memory Discovery
+
+// Discover implements [discovery.Discoverer]. Adds sensors for memory usage,
+// total memory, used memory, free memory, cached memory, swap usage,
+// total swap, used swap, and free swap.
 func (m *Memory) Discover(d *discovery.Discovery) {
 	id := d.Origin.Name + "_memory"
 	avail := availabilityTemplate(m.Topic())
@@ -425,6 +426,7 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 }
 
 // Network Discovery
+
 func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery) {
 	id := d.Origin.Name + "_net_" + name + "_rx"
 	avail := availabilityTemplate(n.Topic())
@@ -485,6 +487,8 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 	}
 }
 
+// Discover implements [discovery.Discoverer]. Adds sensors for interface rx rate,
+// tx rate, rx bytes, and tx bytes.
 func (n *Net) Discover(d *discovery.Discovery) {
 	for name, iface := range n.interfaces {
 		iface.discover(name, n, d)

@@ -63,7 +63,8 @@ func (f cpuFlag) Has(flags cpuFlag) bool {
 	return f&flags != 0
 }
 
-// CPU represents the temperature, frequency, and usage of the system CPU
+// CPU implements the [Metric] interface to provide the system processor
+// metrics. This includes the usage, frequency, and temperature of the CPU
 // and each of its cores.
 type CPU struct {
 	Name    string
@@ -90,6 +91,9 @@ type CPU struct {
 	ch   chan error
 }
 
+// NewCPU returns a new [CPU] initialized from cfg. If there is any error
+// encountered while initializing the CPU, a non-nil error that wraps [ErrNotSupported]
+// is returned.
 func NewCPU(cfg *config.Config) (*CPU, error) {
 	c := &CPU{
 		Name:  cfg.CPU.Name,
@@ -260,14 +264,17 @@ func (c *CPU) findFreqs() error {
 	return nil
 }
 
+// Type returns the metric type, "cpu".
 func (c *CPU) Type() string {
 	return "cpu"
 }
 
+// Topic returns the topic to publish cpu metrics to.
 func (c *CPU) Topic() string {
 	return c.topic
 }
 
+// SetInterval sets the update interval for the metric.
 func (c *CPU) SetInterval(d time.Duration) {
 	if d == 0 {
 		c.Stop()
@@ -310,6 +317,8 @@ func (c *CPU) loop(ctx context.Context) {
 	}
 }
 
+// Start starts the cpu updating. If ctx is cancelled or
+// times out, the metric will stop and may not be restarted.
 func (c *CPU) Start(ctx context.Context) (err error) {
 	if c.interval == 0 {
 		log.Warn("CPU interval is 0, not starting")
@@ -397,6 +406,9 @@ func (c *CPU) updateUsage() error {
 	return nil
 }
 
+// Update forces the cpu metric to update. The returned error will not
+// be sent on the channel returned by [CPU.Updated] unlike updates that
+// happen automatically every update interval.
 func (c *CPU) Update() (err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -418,10 +430,15 @@ func (c *CPU) Update() (err error) {
 	return
 }
 
+// Updated returns the channel that updates will be sent on. A received value
+// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
+// error is the first error encountered during updating and indicates a failed update.
 func (c *CPU) Updated() <-chan error {
 	return c.ch
 }
 
+// Stop stops the CPU from continuing to update. Once stopped, the CPU
+// may not be restarted.
 func (c *CPU) Stop() {
 	c.mu.Lock()
 	if c.stop != nil {
@@ -430,14 +447,11 @@ func (c *CPU) Stop() {
 	c.mu.Unlock()
 }
 
+// String implements [fmt.Stringer]
 func (c *CPU) String() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return fmt.Sprintf("  %s\n  %d cores", c.Name, len(c.cores))
-}
-
-func (c *CPU) MarshalJSON() ([]byte, error) {
-	return c.AppendText(nil)
 }
 
 func (c *cpuCore) AppendText(b []byte, flags cpuFlag) []byte {
@@ -458,6 +472,7 @@ func (c *cpuCore) AppendText(b []byte, flags cpuFlag) []byte {
 	return append(b, '}')
 }
 
+// AppendText implements [encoding/TextAppender]
 func (c *CPU) AppendText(b []byte) ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -487,6 +502,12 @@ func (c *CPU) AppendText(b []byte) ([]byte, error) {
 	return append(b, ']', '}'), nil
 }
 
+// MarshalJSON implements [json.Marshaler] and is equivalent to [CPU.AppendText](nil).
+func (c *CPU) MarshalJSON() ([]byte, error) {
+	return c.AppendText(nil)
+}
+
+// SelectAuto returns the package temperature and frequency of the first core.
 func (c *CPU) SelectAuto() (temp, freq int64) {
 	if c.temp == nil {
 		return c.SelectFirst()
@@ -498,6 +519,7 @@ func (c *CPU) SelectAuto() (temp, freq int64) {
 	return
 }
 
+// SelectMin returns the temperature and frequency of the first core.
 func (c *CPU) SelectFirst() (temp, freq int64) {
 	if len(c.cores) == 0 {
 		return
@@ -509,6 +531,7 @@ func (c *CPU) SelectFirst() (temp, freq int64) {
 	return
 }
 
+// SelectMin returns the average temperature and frequency of all cores.
 func (c *CPU) SelectAvg() (temp, freq int64) {
 	for i := range c.cores {
 		if c.cores[i].temp != nil {
@@ -521,6 +544,7 @@ func (c *CPU) SelectAvg() (temp, freq int64) {
 	return
 }
 
+// SelectMin returns the maximum temperature and frequency of all cores.
 func (c *CPU) SelectMax() (temp, freq int64) {
 	for i := range c.cores {
 		if c.cores[i].temp != nil {
@@ -535,6 +559,7 @@ func (c *CPU) SelectMax() (temp, freq int64) {
 	return
 }
 
+// SelectMin returns the minimum temperature and frequency of all cores.
 func (c *CPU) SelectMin() (temp, freq int64) {
 	for i := range c.cores {
 		if c.cores[i].temp != nil {
@@ -549,6 +574,7 @@ func (c *CPU) SelectMin() (temp, freq int64) {
 	return
 }
 
+// SelectRand returns the temperature and frequency of a random core.
 func (c *CPU) SelectRand() (temp, freq int64) {
 	i := rand.IntN(len(c.cores))
 	if c.cores[i].temp != nil {

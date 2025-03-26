@@ -19,18 +19,12 @@ func (e *Error) Unwrap() error {
 }
 
 var (
-	ErrDisabled = errors.New("metric disabled")
-	ErrNoChange = errors.New("no change")
-)
-
-var (
 	ErrAlreadyRunning = errors.New("already running")
+	ErrDisabled       = errors.New("metric disabled")
+	ErrMaxDepth       = errors.New("max depth exceeded")
+	ErrNoChange       = errors.New("no change")
+	ErrNotFound       = errors.New("not found")
 	ErrNotSupported   = errors.New("not supported")
-)
-
-var (
-	ErrNotFound = errors.New("not found")
-	ErrMaxDepth = errors.New("max depth exceeded")
 )
 
 func errAlreadyRunning(metric string) error {

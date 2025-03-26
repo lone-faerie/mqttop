@@ -13,6 +13,7 @@ func init() {
 	defaultLogger.Warn("DEBUG")
 }
 
+// Debug logs at [LevelDebug]
 func Debug(msg string, args ...any) {
 	defaultLogger.Debug(msg, args...)
 }
@@ -25,6 +26,7 @@ func (h debugHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return level == slog.LevelDebug || h.Handler.Enabled(ctx, level)
 }
 
+// SetHandler sets the default logger's handler to the one given.
 func SetHandler(h Handler) {
 	l := slog.New(debugHandler{h}).With(defaultLogger.with...).WithGroup(defaultLogger.group)
 	defaultLogger.Logger = l
@@ -32,6 +34,7 @@ func SetHandler(h Handler) {
 
 type debugLogger struct{}
 
+// DebugLogger returns a [Logger] that logs at [LevelDebug]
 func DebugLogger() Logger {
 	return debugLogger{}
 }

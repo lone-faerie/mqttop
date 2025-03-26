@@ -18,6 +18,8 @@ import (
 	"github.com/lone-faerie/mqttop/log"
 )
 
+// NetInterface holds the data for each network interface monitored
+// by [Net].
 type NetInterface struct {
 	net.Interface
 	IP           netip.Addr
@@ -31,10 +33,14 @@ type NetInterface struct {
 	lastRx       uint64
 }
 
+// Running returns true if the interface is running, else false.
 func (iface *NetInterface) Running() bool {
 	return iface.Interface.Flags&net.FlagRunning != 0
 }
 
+// Net implements the [Metric] interface to provide the system network
+// metrics. This includes the ip address, rx and tx throughput of
+// each network interface.
 type Net struct {
 	interfaces map[string]*NetInterface
 
@@ -53,6 +59,9 @@ type Net struct {
 	ch    chan error
 }
 
+// NewNet returns a new [Net] initialized from cfg. If there is any error
+// encountered while initializing the Net, a non-nil error that wraps [ErrNotSupported]
+// is returned.
 func NewNet(cfg *config.Config) (*Net, error) {
 	n := &Net{cfg: &cfg.Net}
 	if err := n.parseInterfaces(true); err != nil {
@@ -91,9 +100,6 @@ func ipAddr(addr string) (netip.Addr, error) {
 }
 
 func (n *Net) skipInterface(iface string) bool {
-	//	if slices.Contains(n.cfg.Net.Include, iface) {
-	//		return false
-	//	}
 	if slices.Contains(n.cfg.Exclude, iface) {
 		return true
 	}
@@ -185,14 +191,17 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 	return nil
 }
 
+// Type returns the metric type, "net".
 func (n *Net) Type() string {
 	return "net"
 }
 
+// Topic returns the topic to publish net metrics to.
 func (n *Net) Topic() string {
 	return n.topic
 }
 
+// SetInterval sets the update interval for the metric.
 func (n *Net) SetInterval(d time.Duration) {
 	n.mu.Lock()
 	if n.tick != nil && d != n.interval {
@@ -244,6 +253,8 @@ func (n *Net) loop(ctx context.Context) {
 	}
 }
 
+// Start starts the net updating. If ctx is cancelled or
+// times out, the metric will stop and may not be restarted.
 func (n *Net) Start(ctx context.Context) (err error) {
 	if n.interval == 0 {
 		log.Warn("Network interval is 0, not starting")
@@ -257,10 +268,14 @@ func (n *Net) Start(ctx context.Context) (err error) {
 	return
 }
 
+// Rescan rescans the system for any new or removed network interfaces.
 func (n *Net) Rescan() error {
 	return n.parseInterfaces(false)
 }
 
+// Update forces the net metric to update. The returned error will not
+// be sent on the channel returned by [Net.Updated] unlike updates that
+// happen automatically every update interval.
 func (n *Net) Update() error {
 	n.mu.Lock()
 	for _, iface := range n.interfaces {
@@ -271,10 +286,15 @@ func (n *Net) Update() error {
 	return err
 }
 
+// Updated returns the channel that updates will be sent on. A received value
+// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
+// error is the first error encountered during updating and indicates a failed update.
 func (n *Net) Updated() <-chan error {
 	return n.ch
 }
 
+// Stop stops the Net from continuing to update. Once stopped, the Net
+// may not be restarted.
 func (n *Net) Stop() {
 	n.mu.Lock()
 	if n.stop != nil {
@@ -283,6 +303,7 @@ func (n *Net) Stop() {
 	n.mu.Unlock()
 }
 
+// String implements [fmt.Stringer]
 func (n *Net) String() string {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
@@ -295,6 +316,7 @@ func (n *Net) String() string {
 	return fmt.Sprintf("  %d interfaces (%d running)", len(n.interfaces), running)
 }
 
+// AppendText implements [encoding/TextAppender]
 func (n *Net) AppendText(b []byte) ([]byte, error) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
@@ -341,10 +363,14 @@ func (n *Net) AppendText(b []byte) ([]byte, error) {
 	return append(b, '}'), nil
 }
 
+// MarshalJSON implements [json.Marshaler] and is equivalent to [CPU.AppendText](nil).
 func (n *Net) MarshalJSON() ([]byte, error) {
 	return n.AppendText(nil)
 }
 
+// Update forces the individual network interface to update. The returned
+// error will not be sent on the channel returned by [Net.Updated] unlike
+// updates that happen automatically every update interval.
 func (iface *NetInterface) Update() error {
 	rx, tx, err := sysfs.NetStatistics(iface.Name)
 	if err != nil {

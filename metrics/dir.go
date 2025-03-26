@@ -22,6 +22,8 @@ type dirEntry struct {
 	childs []dirEntry
 }
 
+// Dir implements the [Metric] interface to provide the metrics for a
+// given directory. This includes the size of the directory.
 type Dir struct {
 	Name string
 	path string
@@ -43,6 +45,9 @@ type Dir struct {
 	ch   chan error
 }
 
+// NewDir returns a new [Dir] at the given path initialized from cfg. If there is
+// no config entry for the given path or the path does not exist, a non-nil error
+// that wraps [ErrNotSupported] is returned.
 func NewDir(path string, cfg *config.Config) (*Dir, error) {
 	var dcfg *config.DirConfig
 	for i := range cfg.Dirs {
@@ -149,14 +154,18 @@ func (d *Dir) init(path string, parent *dirEntry, depth int) {
 	parent.size += entry.size
 }
 
+// Type returns the metric type, "dir".
 func (d *Dir) Type() string {
 	return "dir"
 }
 
+// Topic returns the topic to publish directory metrics to.
 func (d *Dir) Topic() string {
 	return d.topic
 }
 
+// Slug returns the directory path with seperators replaced with underscores
+// and the leading seperator removed.
 func (d *Dir) Slug() string {
 	return strings.ReplaceAll(
 		strings.TrimPrefix(d.Name, file.Separator),
@@ -165,6 +174,9 @@ func (d *Dir) Slug() string {
 	)
 }
 
+// SetInterval sets the update interval for the metric. If the directory
+// is watched instead of polled, updates will happen at most every interval,
+// but may be less often.
 func (dir *Dir) SetInterval(d time.Duration) {
 	dir.mu.Lock()
 	if dir.tick != nil && d != dir.interval {
@@ -287,6 +299,8 @@ func (d *Dir) startWatch(ctx context.Context) error {
 	return nil
 }
 
+// Start starts the directory updating. If ctx is cancelled or
+// times out, the metric will stop and may not be restarted.
 func (d *Dir) Start(ctx context.Context) (err error) {
 	if d.interval == 0 {
 		log.Warn("Dir interval is 0, not starting", "path", d.path)
@@ -435,6 +449,9 @@ func (d *Dir) updateSlow() error {
 	return nil
 }
 
+// Update forces the directory metric to update. The returned error will not
+// be sent on the channel returned by [Dir.Updated] unlike updates that
+// happen automatically every update interval.
 func (d *Dir) Update() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -449,10 +466,15 @@ func (d *Dir) Update() error {
 	return nil
 }
 
+// Updated returns the channel that updates will be sent on. A received value
+// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
+// error is the first error encountered during updating and indicates a failed update.
 func (d *Dir) Updated() <-chan error {
 	return d.ch
 }
 
+// Stop stops the Dir from continuing to update. Once stopped, the Dir
+// may not be restarted.
 func (d *Dir) Stop() {
 	d.mu.Lock()
 	if d.stop != nil {
@@ -461,10 +483,12 @@ func (d *Dir) Stop() {
 	d.mu.Unlock()
 }
 
+// String implements [fmt.Stringer]
 func (d *Dir) String() string {
-	return ""
+	return d.path
 }
 
+// AppendText implements [encoding/TextAppender]
 func (d *Dir) AppendText(b []byte) ([]byte, error) {
 	d.mu.RLock()
 	b = append(b, "{\"path\": \""...)
@@ -476,6 +500,7 @@ func (d *Dir) AppendText(b []byte) ([]byte, error) {
 	return b, nil
 }
 
+// MarshalJSON implements [json.Marshaler] and is equivalent to [Dir.AppendText](nil).
 func (d *Dir) MarshalJSON() ([]byte, error) {
 	return d.AppendText(nil)
 }

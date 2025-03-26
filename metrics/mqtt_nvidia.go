@@ -10,6 +10,10 @@ import (
 )
 
 // GPU Discovery
+
+// Discover implements [discovery.Discoverer]. Adds sensors for gpu usage,
+// gpu power, gpu temperature, gpu memory usage, total gpu memory, free
+// gpu memory, and used gpu memory.
 func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 	prefix := d.Origin.Name + "_gpu_" + strconv.Itoa(g.index)
 	id := prefix

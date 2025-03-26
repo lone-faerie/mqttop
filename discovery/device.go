@@ -12,6 +12,8 @@ import (
 
 type Connection [2]string
 
+// Device implements the device mapping for the discovery payload. This ties components
+// together in Home Assistant's device registry.
 type Device struct {
 	ConfigurationURL string       `json:"cu,omitempty"`
 	Connections      []Connection `json:"cns,omitempty"`
@@ -31,6 +33,8 @@ var defaultHostnames = []string{
 	"debian",
 }
 
+// NewDevice returns a new Device with an identifier equal to the sha256 sum of
+// the device's machine id, encoded in base64.
 func NewDevice() (*Device, error) {
 	d := &Device{}
 	id, err := sysfs.MachineID()

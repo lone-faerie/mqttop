@@ -19,6 +19,7 @@ import (
 	"github.com/lone-faerie/mqttop/internal/sysfs"
 )
 
+// Disk holds the data for each disk monitored by [Disks]
 type Disk struct {
 	procfs.Mount
 	sysfs.BlockIO
@@ -33,6 +34,9 @@ type Disk struct {
 	showIO bool
 }
 
+// Disks implements the [Metric] interface to provide the system disks
+// metrics. This includes the total, free, and used sizes and read and
+// write io of each disk.
 type Disks struct {
 	disks  map[string]*Disk
 	showIO bool
@@ -69,6 +73,9 @@ func (d *Disks) newDisk(mnt *procfs.Mount, cfg *config.DiskConfig) *Disk {
 	return disk
 }
 
+// NewCPU returns a new [Disks] initialized from cfg. If there is any error
+// encountered while initializing the Disks, a non-nil error that wraps
+// [ErrNotSupported] is returned.
 func NewDisks(cfg *config.Config) (*Disks, error) {
 	d := &Disks{cfg: &cfg.Disks}
 	if err := d.rescan(true); err != nil {
@@ -92,14 +99,17 @@ func NewDisks(cfg *config.Config) (*Disks, error) {
 	return d, nil
 }
 
+// Type returns the metric type, "disks".
 func (d *Disks) Type() string {
 	return "disks"
 }
 
+// Topic returns the topic to publish disks metrics to.
 func (d *Disks) Topic() string {
 	return d.topic
 }
 
+// SetInterval sets the update interval for the metric.
 func (dsk *Disks) SetInterval(d time.Duration) {
 	dsk.mu.Lock()
 	if dsk.tick != nil && d != dsk.interval {
@@ -161,6 +171,8 @@ func (d *Disks) loop(ctx context.Context) {
 	}
 }
 
+// Start starts the disks updating. If ctx is cancelled or
+// times out, the metric will stop and may not be restarted.
 func (d *Disks) Start(ctx context.Context) (err error) {
 	if d.interval == 0 {
 		log.Warn("Disks interval is 0, not starting")
@@ -220,12 +232,16 @@ func (d *Disks) rescan(firstRun bool) error {
 	return nil
 }
 
+// Rescan rescans the system for any new or removed disks.
 func (d *Disks) Rescan() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.rescan(false)
 }
 
+// Update forces the disks metric to update. The returned error will not
+// be sent on the channel returned by [Disks.Updated] unlike updates that
+// happen automatically every update interval.
 func (d *Disks) Update() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -235,10 +251,15 @@ func (d *Disks) Update() error {
 	return d.group.Wait()
 }
 
+// Updated returns the channel that updates will be sent on. A received value
+// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
+// error is the first error encountered during updating and indicates a failed update.
 func (d *Disks) Updated() <-chan error {
 	return d.ch
 }
 
+// Stop stops the Disks from continuing to update. Once stopped, the Disks
+// may not be restarted.
 func (d *Disks) Stop() {
 	d.mu.Lock()
 	if d.stop != nil {
@@ -247,6 +268,7 @@ func (d *Disks) Stop() {
 	d.mu.Unlock()
 }
 
+// String implements [fmt.Stringer]
 func (d *Disks) String() string {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -267,6 +289,7 @@ func (d *Disks) String() string {
 	return b.String()
 }
 
+// AppendText implements [encoding/TextAppender]
 func (d *Disks) AppendText(b []byte) ([]byte, error) {
 	b = append(b, '{')
 	first := true
@@ -296,6 +319,7 @@ func (d *Disks) AppendText(b []byte) ([]byte, error) {
 	return append(b, '}'), nil
 }
 
+// MarshalJSON implements [json.Marshaler] and is equivalent to [CPU.AppendText](nil).
 func (d *Disks) MarshalJSON() ([]byte, error) {
 	return d.AppendText(nil)
 }
@@ -305,6 +329,9 @@ func (d *Disk) update(wg *sync.WaitGroup) error {
 	return d.Update()
 }
 
+// Update forces the individual disk to update. The returned error will not
+// be sent on the channel returned by [Disks.Updated] unlike updates that
+// happen automatically every update interval.
 func (d *Disk) Update() (err error) {
 	stat, err := file.Statfs(d.Mnt)
 	if err != nil {

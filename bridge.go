@@ -156,6 +156,8 @@ func metricTopics(m metrics.Metric) map[string]byte {
 	}
 }
 
+// Start sets up each metric and begins listening for updates. Any updates that
+// return nil errors will be published to the relevant metric's topic.
 func (b *Bridge) Start(ctx context.Context) {
 	b.once.Do(func() {
 		if ctx == nil {
@@ -230,6 +232,7 @@ func (b *Bridge) start(ctx context.Context) {
 	return
 }
 
+// Ready returns a channel that can be used to wait until all metrics have been started.
 func (b *Bridge) Ready() <-chan struct{} {
 	return b.ready
 }
@@ -299,7 +302,8 @@ func (b *Bridge) waitDiscover(ctx context.Context) error {
 	return <-ch
 }
 
-// Discover publishes the discovery payload for Home Assistant mqtt discovery.
+// Discover publishes the discovery payload for Home Assistant MQTT discovery after
+// optionally waiting for a payload on the given wait topic.
 func (b *Bridge) Discover(ctx context.Context) error {
 	if err := b.waitDiscover(ctx); err != nil {
 		log.Warn("Could not wait for discovery", err)

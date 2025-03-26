@@ -1,5 +1,7 @@
+// Package icon provides a few useful [Material Design Icons](https://pictogrammers.com/library/mdi/).
 package icon
 
+// Icon names
 const (
 	Battery       = "mdi:battery"
 	CPU32Bit      = "mdi:cpu-32-bit"
@@ -15,6 +17,7 @@ const (
 const bitCount = 32 << (^uint(0) >> 63)
 const bits = string(bitCount/10+'0') + string(bitCount%10+'0')
 
+// Icon aliases
 const (
 	GPU = ExpansionCard
 	CPU = "mdi:cpu-" + bits + "-bit"

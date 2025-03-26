@@ -49,6 +49,9 @@ type nvmlProcess struct {
 	IsCompute bool
 }
 
+// GPU implements the [Metric] interface to provide the Nvidia GPU
+// metrics. This includes the throughput, usage, clock, power,
+// temperature, and memory of the GPU.
 type NvidiaGPU struct {
 	Name     string
 	maxPower uint32
@@ -66,8 +69,9 @@ type NvidiaGPU struct {
 	memTotal uint64
 	memFree  uint64
 	memUsed  uint64
-	memSize  byteutil.ByteSize
-	procs    []nvmlProcess
+
+	memSize byteutil.ByteSize
+	procs   []nvmlProcess
 
 	index   int
 	flags   gpuFlag
@@ -86,6 +90,14 @@ type NvidiaGPU struct {
 	nvmlOnce  sync.Once
 }
 
+// NewGPU returns a new [GPU] initialized from cfg. If there is any error
+// encountered while initializing the GPU, a non-nil error that wraps [ErrNotSupported]
+// is returned.
+//
+// NewGPU calls [nvml.Init], which must be followed by a call to [nvml.Shutdown].
+// If a non-nil error is returned, this has already been handled. Otherwise, it
+// may be done by either calling [NvidiaGPU.Stop] or cancelling the [context.Context]
+// given to [NvidiaGPU.Start].
 func NewNvidiaGPU(cfg *config.Config) (*NvidiaGPU, error) {
 	g := &NvidiaGPU{flags: gpuAll}
 	_, err := sysfs.GPUVendor()
@@ -107,12 +119,12 @@ func NewNvidiaGPU(cfg *config.Config) (*NvidiaGPU, error) {
 
 	if err := nvml.Init(); err != nvml.SUCCESS {
 		log.Debug("Error initializing nvml", "err", err)
-		return nil, err
+		return nil, errNotSupported(g.Type(), err)
 	}
 	log.Info("nvml initialized")
 	if err := g.init(cfg); err != nvml.SUCCESS {
 		g.shutdown()
-		return nil, err
+		return nil, errNotSupported(g.Type(), err)
 	}
 	size, err := byteutil.ParseSize(cfg.GPU.SizeUnit)
 	if err != nil {
@@ -149,14 +161,17 @@ func (g *NvidiaGPU) init(cfg *config.Config) error {
 	return nvml.SUCCESS
 }
 
+// Type returns the metric type, "gpu".
 func (g *NvidiaGPU) Type() string {
 	return "gpu"
 }
 
+// Topic returns the topic to publish cpu metrics to.
 func (g *NvidiaGPU) Topic() string {
 	return g.topic
 }
 
+// SetInterval sets the update interval for the metric.
 func (g *NvidiaGPU) SetInterval(d time.Duration) {
 	g.mu.Lock()
 	if g.tick != nil && d != g.interval {
@@ -195,6 +210,11 @@ func (g *NvidiaGPU) loop(ctx context.Context) {
 	}
 }
 
+// Start starts the cpu updating. If ctx is cancelled or
+// times out, the metric will stop and may not be restarted.
+//
+// After calling Start, handling of [nvml.Shutdown] should be done
+// by cancelling the given metric, instead of calling [NvidiaGPU.Stop].
 func (g *NvidiaGPU) Start(ctx context.Context) error {
 	if g.interval == 0 {
 		log.Warn("GPU interval is 0, not starting")
@@ -216,6 +236,9 @@ func (g *NvidiaGPU) getThroughput(u nvml.PcieUtilCounter, p *uint32) (err error)
 	return nil
 }
 
+// Update forces the gpu metric to update. The returned error will not
+// be sent on the channel returned by [GPU.Updated] unlike updates that
+// happen automatically every update interval.
 func (g *NvidiaGPU) Update() error {
 	g.mu.Lock()
 	var (
@@ -332,6 +355,9 @@ func (g *NvidiaGPU) Update() error {
 	return nil
 }
 
+// Updated returns the channel that updates will be sent on. A received value
+// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
+// error is the first error encountered during updating and indicates a failed update.
 func (g *NvidiaGPU) Updated() <-chan error {
 	return g.ch
 }
@@ -343,6 +369,12 @@ func (g *NvidiaGPU) shutdown() {
 	})
 }
 
+// Stop stops the CPU from continuing to update. Once stopped, the CPU
+// may not be restarted.
+//
+// This will also call [nvml.Shutdown] if the metric has not yet been
+// started. After starting, this should be done by cancelling the
+// context given to [NvidiaGPU.Start].
 func (g *NvidiaGPU) Stop() {
 	g.mu.Lock()
 	if g.stop != nil {
@@ -353,10 +385,12 @@ func (g *NvidiaGPU) Stop() {
 	g.mu.Unlock()
 }
 
+// String implements [fmt.Stringer]
 func (g *NvidiaGPU) String() string {
 	return "  " + g.Name
 }
 
+// AppendText implements [encoding/TextAppender]
 func (g *NvidiaGPU) AppendText(b []byte) ([]byte, error) {
 	g.mu.RLock()
 	b = append(b, "{\"name\": \""...)
@@ -409,6 +443,7 @@ func (g *NvidiaGPU) AppendText(b []byte) ([]byte, error) {
 	return b, nil
 }
 
+// MarshalJSON implements [json.Marshaler] and is equivalent to [GPU.AppendText](nil).
 func (g *NvidiaGPU) MarshalJSON() ([]byte, error) {
 	return g.AppendText(nil)
 }

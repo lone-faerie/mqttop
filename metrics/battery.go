@@ -67,6 +67,9 @@ func (f batteryFlag) String() string {
 	return fmt.Sprintf("%s (%08b)", strings.Join(s, "|"), f)
 }
 
+// Battery implements the [Metric] interface to provide the system battery
+// metrics. This includes the kind, status, capacity, power, and time remaining
+// of the battery.
 type Battery struct {
 	bat *sysfs.Batt
 
@@ -96,6 +99,8 @@ type Battery struct {
 	ch   chan error
 }
 
+// NewBattery returns a new [Battery] initialized from cfg. If there is no
+// battery on the system, a non-nil error that wraps [ErrNotSupported] is returned.
 func NewBattery(cfg *config.Config) (*Battery, error) {
 	b := &Battery{}
 	bat, err := sysfs.GetBattery()
@@ -150,14 +155,17 @@ func (b *Battery) setFlags() {
 	b.setFlag(b.bat.HasTimeRemaining, batteryTime)
 }
 
+// Type returns the metric type, "battery".
 func (*Battery) Type() string {
 	return "battery"
 }
 
+// Topic returns the topic to publish battery metrics to.
 func (b *Battery) Topic() string {
 	return b.topic
 }
 
+// SetInterval sets the update interval for the metric.
 func (b *Battery) SetInterval(d time.Duration) {
 	b.mu.Lock()
 	if b.tick != nil && d != b.interval {
@@ -196,6 +204,8 @@ func (b *Battery) loop(ctx context.Context) {
 	}
 }
 
+// Start starts the battery updating. If ctx is cancelled or
+// times out, the metric will stop.
 func (b *Battery) Start(ctx context.Context) (err error) {
 	if b.interval == 0 {
 		log.Warn("Battery interval is 0, not starting")
@@ -366,6 +376,9 @@ func (b *Battery) updateTimeRemaining() error {
 	return nil
 }
 
+// Update forces the battery metric to update. The returned error will not
+// be sent on the channel returned by [Battery.Updated] unlike updates that
+// happen automatically every update interval.
 func (b *Battery) Update() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -413,10 +426,15 @@ func (b *Battery) Update() error {
 	return nil
 }
 
+// Updated returns the channel that updates will be sent on. A received value
+// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
+// error is the first error encountered during updating and indicates a failed update.
 func (b *Battery) Updated() <-chan error {
 	return b.ch
 }
 
+// Stop stops the Battery from continuing to update. Once stopped, the Battery
+// may not be restarted.
 func (b *Battery) Stop() {
 	b.mu.Lock()
 	if b.stop != nil {
@@ -425,6 +443,7 @@ func (b *Battery) Stop() {
 	b.mu.Unlock()
 }
 
+// String implements [fmt.Stringer]
 func (bat *Battery) String() string {
 	bat.mu.RLock()
 	defer bat.mu.RUnlock()
@@ -434,6 +453,7 @@ func (bat *Battery) String() string {
 	return b.String()
 }
 
+// AppendText implements [encoding/TextAppender]
 func (bat *Battery) AppendText(b []byte) ([]byte, error) {
 	bat.mu.RLock()
 	defer bat.mu.RUnlock()
@@ -457,6 +477,7 @@ func (bat *Battery) AppendText(b []byte) ([]byte, error) {
 	return append(b, '}'), nil
 }
 
+// MarshalJSON implements [json.Marshaler] and is equivalent to [Battery.AppendText](nil).
 func (bat *Battery) MarshalJSON() ([]byte, error) {
 	return bat.AppendText(nil)
 }
