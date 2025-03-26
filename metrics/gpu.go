@@ -1,4 +1,4 @@
-//go:build !nvidia
+//go:build nogpu
 
 package metrics
 
