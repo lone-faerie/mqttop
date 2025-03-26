@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/lone-faerie/mqttop/discovery"
 	"github.com/lone-faerie/mqttop/discovery/icon"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
