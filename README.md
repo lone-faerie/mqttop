@@ -8,7 +8,7 @@ There are two provided docker images, one with GPU support and one without. To m
 ```yaml
 services:
   mqttop:
-    image: mqttop:latest
+    image: ghcr.io/lone-faerie/mqttop:latest
     environment:
       - MQTTOP_ROOTFS_PATH=/host
     volumes:
@@ -21,7 +21,7 @@ services:
 ```yaml
 services:
   mqttop:
-    image: mqttop:latest
+    image: ghcr.io/lone-faerie/mqttop:gpu
     environment:
       - MQTTOP_ROOTFS_PATH=/host
     volumes:
@@ -39,23 +39,25 @@ services:
 ```
 
 ## Configuration
-Configuration files are stored in yaml format. Configs can be broken up into multiple files and may be passed as either a list of files or directories. The path to config files is either the path(s) passed as arguments, the value of $MQTTOP_CONFIG_PATH, $XDG_CONFIG_HOME/mqttop.yaml, or $HOME/.config/mqttop.yaml. The default path for config files in the docker container is /config/config.yml Durations are parsed using Go's [time.ParseDuration](https://pkg.go.dev/time#ParseDuration) and any strings may be set to an environment variable `$<variable>` or Docker secret `!secret <secret>`.
+Configuration files are stored in yaml format. Configs can be broken up into multiple files and may be passed as either a list of files or directories. The path to config files is either the path(s) passed as arguments, the value of `$MQTTOP_CONFIG_PATH`, `$XDG_CONFIG_HOME/mqttop.yaml`, or `$HOME/.config/mqttop.yaml`. The default path for config files in the docker container is `/config/config.yml`.
+
+Durations are parsed using Go's [time.ParseDuration](https://pkg.go.dev/time#ParseDuration) and any strings may be set to an environment variable `$<variable>` or Docker secret `!secret <secret>`.
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `interval` | duration | 2s | Default update interval for metrics |
-| `mqtt` | [MQTTConfig](#mqttconfig) | | MQTT configuration |
-| `discovery` | [DiscoveryConfig](#discoveryconfig) | | Discovery configuration |
-| `log` | [LogConfig](#logconfig) | | Log configuration |
-| `cpu` | [CPUConfig](#cpuconfig) | | CPU metric configuration |
-| `memory` | [MemoryConfig](#memoryconfig) | | Memory metric configuration |
-| `disks` | [DisksConfig](#disksconfig) | | Disks metric configuration |
-| `net` | [NetConfig](#netconfig) | | Network metric configuration |
-| `battery` | [BatteryConfig](#batteryconfig) | | Battery metric configuration |
-| `dirs` | list [DirConfig](#dirconfig) | | List of directory metric configurations |
-| `gpu` | [GPUConfig](#gpuconfig) | | GPU metric configuration |
+| `mqtt` | [MQTTConfig](#mqtt-configuration) | | MQTT configuration |
+| `discovery` | [DiscoveryConfig](#discovery-configuration) | | Discovery configuration |
+| `log` | [LogConfig](#log-configuration) | | Log configuration |
+| `cpu` | [CPUConfig](#cpu-configuration) | | CPU metric configuration |
+| `memory` | [MemoryConfig](#memory-configuration) | | Memory metric configuration |
+| `disks` | [DisksConfig](#disks-configuration) | | Disks metric configuration |
+| `net` | [NetConfig](#network-configuration) | | Network metric configuration |
+| `battery` | [BatteryConfig](#battery-configuration) | | Battery metric configuration |
+| `dirs` | list [DirConfig](#directory-configuration) | | List of directory metric configurations |
+| `gpu` | [GPUConfig](#gpu-configuration) | | GPU metric configuration |
 
-### MQTTConfig
+### MQTT Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `broker` | string | "$MQTTOP_BROKER_ADDRESS" | Address of the MQTT broker |
@@ -75,7 +77,7 @@ Configuration files are stored in yaml format. Configs can be broken up into mul
 
 See https://pkg.go.dev/github.com/eclipse/paho.mqtt.golang#ClientOptions
 
-### DiscoveryConfig
+### Discovery Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enabled/disable MQTT discovery |
@@ -90,14 +92,14 @@ See https://pkg.go.dev/github.com/eclipse/paho.mqtt.golang#ClientOptions
 
 See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 
-### LogConfig
+### Log Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `level` | level | INFO | Log level to use |
 | `output` | string | | Where to output logs, one of stderr, stdout, or path to a file, if blank will default to stderr |
 | `format` | string | | Format of log messages, either blank or json |
 
-### CPUConfig
+### CPU Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
@@ -107,7 +109,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `name_template` | string | | Template to use for the CPU name, will override `name` |
 | `selection_mode` | string | `auto` | Mode used to select overall CPU temperature and frequency, one of `auto`, `first`, `average`, `max`, `min`, `random` |
 
-### MemoryConfig
+### Memory Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
@@ -116,7 +118,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `size_unit` | string | | Size unit to use for memory size, if blank, will be automatically determined |
 | `include_swap` | bool | true | Include swap in the metrics |
 
-### DisksConfig
+### Disks Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
@@ -125,9 +127,9 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `use_fstab` | bool | true | Use /etc/fstab to find disks |
 | `rescan` | bool or duration | | Interval to rescan for disks, if true will use update interval, else the given interval |
 | `show_io` | bool | true | Include disk IO in metrics |
-| `disk` | list [DiskConfig](#diskconfig) | | List of individual disk configurations |
+| `disk` | list [DiskConfig](#disk-configuration) | | List of individual disk configurations |
 
-### DiskConfig
+### Disk Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
@@ -139,7 +141,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `size_unit` | string | | Size unit to use for disk size, if blank, will be automatically determined |
 | `show_io` | bool | true | Include disk IO in metrics |
 
-### NetConfig
+### Network Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
@@ -150,10 +152,10 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `include_bridge` | bool | false | Include bridge interfaces |
 | `rescan` | bool or duration | | Interval to rescan for interfaces, if true will use update interval, else the given interval |
 | `rate_unit` | string | | Rate unit to use for network throughput, if blank, will be automatically determined |
-| `include` | list [NetIfaceConfig](#netifaceconfig), list string | | List of network interface configurations to explicitly include, if string will be name of interface |
+| `include` | list [NetIfaceConfig](#network-interface-config), list string | | List of network interface configurations to explicitly include, if string will be name of interface |
 | `exclude` | list string | | List of network interfaces to explicitly exclude |
 
-### NetIfaceConfig
+### Network Interface Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `name` | string | | Name to use for representing the interface |
@@ -161,7 +163,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `interface` | string | | Name of the interface on the system |
 | `rate_unit` | string | | Rate unit to use for network throughput, if blank, will use network config `rate_unit` |
 
-### BatteryConfig
+### Battery Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
@@ -169,7 +171,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `topic` | string | "mqttop/metric/battery" | Topic to publish updates to |
 | `time_format` | string | | Format used to represent time remaining |
 
-### DirConfig
+### Directory Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
@@ -182,7 +184,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `watch` | bool | false | Watch the directory for changes instead of polling every update interval |
 | `depth` | int | -1 | Maximum depth to recursively watch the directory, if < 0, will watch the entire depth |
 
-### GPUConfig
+### GPU Configuration
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `enabled` | bool | true | Enable/disable the metric |
