@@ -1,10 +1,12 @@
-# Mqttop
-Provide system metrics over MQTT
+# MQTTop
+MQTTop is a bridge to provide top-like system metrics over MQTT. This was mainly designed for use with [Home Assistant](https://www.home-assistant.io) and supports MQTT Discovery. It has currently only been tested on Linux and with an NVIDIA GPU.
 
-## Installation
-There are two provided docker images, one with GPU support and one without. To monitor the host metrics, mount the root directory and set the environment variable `$MQTTOP_ROOTFS_PATH` to the mount point in the container, and to monitor the host network metrics, set `network_mode` to `host`. In order for GPU support to work, you must have the [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) installed.
+Inspired by [btop](https://github.com/aristocratos/btop) and [linux2mqtt](https://github.com/miaucl/linux2mqtt)
 
-### docker-compose.yml
+## Quick Start
+There are two provided Docker images, one with GPU support and one without. To monitor the host metrics, mount the root directory and set the environment variable `$MQTTOP_ROOTFS_PATH` to the mount point in the container, and to monitor the host network metrics, set `network_mode` to `host`. In order for GPU support to work, you must have the [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) installed.
+
+### docker-compose.yml - Without GPU Support
 ```yaml
 services:
   mqttop:
@@ -17,7 +19,7 @@ services:
     network_mode: host
 ```
 
-### docker-compose.yml - GPU Support
+### docker-compose.yml - With GPU Support
 ```yaml
 services:
   mqttop:
@@ -39,7 +41,7 @@ services:
 ```
 
 ## Configuration
-Configuration files are stored in yaml format. Configs can be broken up into multiple files and may be passed as either a list of files or directories. The path to config files is either the path(s) passed as arguments, the value of `$MQTTOP_CONFIG_PATH`, `$XDG_CONFIG_HOME/mqttop.yaml`, or `$HOME/.config/mqttop.yaml`. The default path for config files in the docker container is `/config/config.yml`.
+Configuration files are stored in yaml format. Configs can be broken up into multiple files and may be passed as either a list of files or directories. The path to config files is either the path(s) passed as arguments, the value of `$MQTTOP_CONFIG_PATH`, `$XDG_CONFIG_HOME/mqttop.yaml`, or `$HOME/.config/mqttop.yaml`. The default path for config files in the Docker container is `/config/config.yml`.
 
 Durations are parsed using Go's [time.ParseDuration](https://pkg.go.dev/time#ParseDuration) and any strings may be set to an environment variable `$<variable>` or Docker secret `!secret <secret>`.
 
