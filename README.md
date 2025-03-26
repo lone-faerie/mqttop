@@ -7,16 +7,16 @@ Any string config field may be set to an environment variable `$<variable>` or D
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `interval` | duration | 2s | Default update interval for metrics |
-| `mqtt` | MQTTConfig | | MQTT configuration |
-| `discovery` | DiscoveryConfig | | Discovery configuration |
-| `log` | LogConfig | | Log configuration |
-| `cpu` | CPUConfig | | CPU metric configuration |
-| `memory` | MemoryConfig | | Memory metric configuration |
-| `disks` | DisksConfig | | Disks metric configuration |
-| `net` | NetConfig | | Network metric configuration |
-| `battery` | BatteryConfig | | Battery metric configuration |
-| `dirs` | []DirConfig | | List of directory metric configurations |
-| `gpu` | GPUConfig | | GPU metric configuration |
+| `mqtt` | [MQTTConfig](#mqttconfig) | | MQTT configuration |
+| `discovery` | [DiscoveryConfig](#discoveryconfig) | | Discovery configuration |
+| `log` | [LogConfig](#logconfig) | | Log configuration |
+| `cpu` | [CPUConfig](#cpuconfig) | | CPU metric configuration |
+| `memory` | [MemoryConfig](#memoryconfig) | | Memory metric configuration |
+| `disks` | [DisksConfig](#disksconfig) | | Disks metric configuration |
+| `net` | [NetConfig](#netconfig) | | Network metric configuration |
+| `battery` | [BatteryConfig](#batteryconfig) | | Battery metric configuration |
+| `dirs` | [][DirConfig](#dirconfig) | | List of directory metric configurations |
+| `gpu` | [GPUConfig](#gpuconfig) | | GPU metric configuration |
 
 ### MQTTConfig
 | Field | Type | Default | Description |
@@ -86,7 +86,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `use_fstab` | bool | true | Use /etc/fstab to find disks |
 | `rescan` | bool or duration | | Interval to rescan for disks, if true will use update interval, else the given interval |
 | `show_io` | bool | true | Include disk IO in metrics |
-| `disk` | []DiskConfig | | List of individual disk configurations |
+| `disk` | [][DiskConfig](#diskconfig) | | List of individual disk configurations |
 
 ### DiskConfig
 | Field | Type | Default | Description |
@@ -112,7 +112,7 @@ See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 | `include_bridge` | bool | false | Include bridge interfaces |
 | `rescan` | bool or duration | | Interval to rescan for interfaces, if true will use update interval, else the given interval |
 | `rate_unit` | string | | Rate unit to use for network throughput, if blank, will be automatically determined |
-| `include` | []NetIfaceConfig,[]string | | List of network interface configurations to explicitly include, if string will be name of interface |
+| `include` | [][NetIfaceConfig](#netifaceconfig),[]string | | List of network interface configurations to explicitly include, if string will be name of interface |
 | `exclude` | []string | | List of network interfaces to explicitly exclude |
 
 ### NetIfaceConfig
