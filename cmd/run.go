@@ -10,12 +10,14 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/template"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lone-faerie/mqttop"
 	"github.com/lone-faerie/mqttop/config"
+	//	"github.com/lone-faerie/mqttop/internal/build"
 	"github.com/lone-faerie/mqttop/log"
 )
 
@@ -46,6 +48,11 @@ var (
 		},
 		Args: cobra.OnlyValidArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
+			if err = printBanner(cmd); err != nil {
+				cmd.Println(err)
+				return
+			}
+
 			initConfig()
 			cfg, err = config.Load(cfgPath...)
 			if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -58,7 +65,7 @@ var (
 			setLogHandler(cfg.Log.Output, cfg.Log.Format)
 			return
 		},
-		Run: runBridge,
+		RunE: runBridge,
 
 		DisableFlagsInUseLine: true,
 	}
@@ -180,7 +187,13 @@ func setLogHandler(output, format string) {
 	return
 }
 
-func runBridge(cmd *cobra.Command, _ []string) {
+func printBanner(cmd *cobra.Command) error {
+	t := template.New("banner")
+	template.Must(t.Parse(bannerTemplate()))
+	return t.Execute(cmd.OutOrStdout(), cmd.Root())
+}
+
+func runBridge(cmd *cobra.Command, _ []string) error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 
@@ -193,7 +206,7 @@ func runBridge(cmd *cobra.Command, _ []string) {
 	bridge := mqttop.New(cfg)
 	if err := bridge.Connect(ctx); err != nil {
 		log.Error("Not connected.", err)
-		return
+		return &exitErr{err, 1}
 	}
 	defer func() {
 		cancel()
@@ -208,10 +221,11 @@ func runBridge(cmd *cobra.Command, _ []string) {
 			bridge.Discover(ctx)
 		}
 	case <-c:
-		return
+		return nil
 	}
 	cfg = nil
 
 	<-c
 	log.Debug("Received signal")
+	return nil
 }

@@ -1,31 +1,62 @@
 package build
 
 import (
+	"log"
+	"regexp"
 	"runtime/debug"
 	"sync"
 )
 
 var (
-	version string
-	pkg     string
+	pkg       string
+	version   string
+	buildTime string
 )
 
 var once sync.Once
 
+func semver(v string) string {
+	loc := regexp.MustCompile(`v?\d+(\.\d+){0,2}`).FindStringIndex(v)
+	if loc == nil {
+		return v
+	}
+	return v[loc[0]:loc[1]]
+}
+
 func load() {
-	if version != "" && pkg != "" {
+	if pkg != "" && version != "" && buildTime != "" {
+		version = semver(version)
 		return
 	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return
 	}
-	if version == "" {
-		version = info.Main.Version
-	}
 	if pkg == "" {
+		log.Println("Using debug.ReadBuildInfo() for pkg")
 		pkg = info.Main.Path
 	}
+	if version == "" {
+		log.Println("Using debug.ReadBuildInfo() for version")
+		version = info.Main.Version
+	}
+	if buildTime == "" {
+		log.Println("Using debug.ReadBuildInfo for build time")
+		for _, s := range info.Settings {
+			if s.Key == "vcs.time" {
+				buildTime = s.Value
+				if buildTime[len(buildTime)-1] == 'Z' {
+					buildTime = buildTime[:len(buildTime)-1] + "+00:00"
+				}
+				break
+			}
+		}
+	}
+}
+
+func Package() string {
+	once.Do(load)
+	return pkg
 }
 
 func Version() string {
@@ -33,7 +64,7 @@ func Version() string {
 	return version
 }
 
-func Package() string {
+func BuildTime() string {
 	once.Do(load)
-	return pkg
+	return buildTime
 }

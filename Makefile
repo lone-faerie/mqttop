@@ -5,6 +5,7 @@ BIN_PATH=${BIN_OUT_DIR}/mqttop
 
 PACKAGE=github.com/lone-faerie/mqttop
 VERSION?=$(shell git describe --always --tags)
+BUILD_TIME=$(subst $(space),T,$(shell date --rfc-3339=seconds))
 
 GO_BUILD_TAGS?=
 comma:=,
@@ -12,8 +13,14 @@ empty:=
 space:=$(empty) $(empty)
 GO_BUILD_TAGS:=$(subst $(space),$(comma),$(strip $(GO_BUILD_TAGS)))
 
-LDFLAGS:=-X '${PACKAGE}/internal/build.version=${VERSION}' \
-	 -X '${PACKAGE}/internal/build.pkg=${PACKAGE}'
+LDFLAGS:=-X '${PACKAGE}/internal/build.pkg=${PACKAGE}' \
+	 -X '${PACKAGE}/internal/build.version=${VERSION}' \
+	 -X '${PACKAGE}/internal/build.buildTime=${BUILD_TIME}'
+
+GO_BUILD_FLAGS=-ldflags="${LDFLAGS}"
+ifneq ($(strip ${GO_BUILD_TAGS}), $(empty))
+	GO_BUILD_FLAGS+=-tags ${GO_BUILD_TAGS}
+endif
 
 all: clean build ## Build binary
 
@@ -22,14 +29,13 @@ clean: ## Clean output directory
 	rm ${BIN_OUT_DIR}/*
 
 build: ## Build binary
-	go build -tags ${GO_BUILD_TAGS} -ldflags="${LDFLAGS}" -o ${BIN_PATH} ./cmd
+	go build ${GO_BUILD_FLAGS} -o ${BIN_PATH} ./cmd
 
 debug: ## Build binary with 'debug' tag
-	echo $(subst $(space),$(comma),$(strip $(GO_BUILD_TAGS) debug))
 	go build -tags $(subst $(space),$(comma),$(strip $(GO_BUILD_TAGS) debug)) -ldflags="${LDFLAGS}" -o ${BIN_PATH} ./cmd
 
 run: ## Build and run binary
-	go run -tags ${GO_BUILD_TAGS} -ldflags="${LDFLAGS}" ./cmd
+	go run ${GO_BUILD_FLAGS} ./cmd
 
 docker: docker-build docker-build-gpu ## Build both docker images
 
