@@ -1,6 +1,6 @@
 services:
   mqttop:
-    image: mqttop:latest
+    image: ghcr.io/lone-faerie/mqttop:gpu
     environment:
       - MQTTOP_ROOTFS_PATH=/host
     volumes:

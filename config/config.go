@@ -2,6 +2,7 @@
 package config
 
 import (
+	"io"
 	"os"
 	"reflect"
 	"slices"
@@ -15,6 +16,9 @@ import (
 	"github.com/lone-faerie/mqttop/log"
 )
 
+// Config contains the configuration for the MQTT client and metrics.
+// Config should be created with a call to [Default], [Read], or [Load] as
+// some options require further configuration than simply setting.
 type Config struct {
 	Interval  time.Duration   `yaml:"interval"`
 	MQTT      MQTTConfig      `yaml:"mqtt,omitempty"`
@@ -43,26 +47,34 @@ var defaultCfg = &Config{
 	GPU:       defaultGPU,
 }
 
+// Default returns the default Config when no config file is provided.
 func Default() *Config {
 	cfg := defaultCfg
 	cfg.load()
 	return cfg
 }
 
-func Load(file ...string) (cfg *Config, err error) {
-	log.Info("Loading config", "path", file)
+// Read returns the Config parsed from the yaml encoded config from r.
+func Read(r io.Reader) (cfg *Config, err error) {
 	cfg = defaultCfg
-	if _, err = os.Stat(file[0]); err != nil {
-		return
-	}
-	r := byteutil.NewMultiFileReader(file...)
-	defer r.Close()
 	if err = yaml.NewDecoder(r).Decode(cfg); err != nil {
 		return
 	}
 	err = cfg.load()
-	log.Info("Config loaded")
 	return
+}
+
+// Load returns the Config parsed from the given yaml files. If the first file does
+// not exist, the default config is returned. If any of the given paths are
+// directories, all the files in the directory are read.
+func Load(file ...string) (cfg *Config, err error) {
+	log.Info("Loading config", "path", file)
+	if _, err = os.Stat(file[0]); err != nil {
+		return defaultCfg, nil
+	}
+	r := byteutil.NewMultiFileReader(file...)
+	defer r.Close()
+	return Read(r)
 }
 
 func (cfg *Config) loadValue(v reflect.Value) error {
@@ -122,19 +134,17 @@ func expand(v reflect.Value) {
 	}
 }
 
+// Expand replaces ${var} or $var in each string field of cfg
+// according to the values of the current environment variables, and
+// replaces !secret var according to the file at /run/secret/<var>.
 func (cfg *Config) Expand() {
 	v := reflect.ValueOf(cfg).Elem()
 	expand(v)
 }
 
-func (cfg *Config) Write(file string) error {
-	f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	enc := yaml.NewEncoder(f)
+// Write writes the yaml encoding of cfg to w.
+func (cfg *Config) Write(w io.Writer) error {
+	enc := yaml.NewEncoder(w)
 	defer enc.Close()
 
 	enc.SetIndent(2)
@@ -162,10 +172,13 @@ func setInterval(v reflect.Value, d time.Duration) {
 	}
 }
 
+// SetInterval sets the update interval for every metric config.
 func (cfg *Config) SetInterval(d time.Duration) {
 	setInterval(reflect.ValueOf(cfg).Elem(), d)
 }
 
+// SetMetrics enables each of the given metrics and disables all others.
+// If only the value "all" is given, all metrics will be enabled.
 func (cfg *Config) SetMetrics(name ...string) {
 	enableAll := len(name) == 1 && name[0] == "all"
 	v := reflect.ValueOf(cfg).Elem()

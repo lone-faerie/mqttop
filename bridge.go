@@ -59,10 +59,21 @@ type Bridge struct {
 	ready  chan struct{}
 }
 
-// New returns a new Bridge with the provided config.
-// The bridge must have the Connect method and Wait method called on it before it may be used.
+// New returns a new Bridge with the provided config and a [mqtt.Client] derived from the config.
+// The bridge must have [Bridge.Connect] and [Bridge.Ready] called on it before it may be used.
 // This follows the convention of [mqtt.NewClient] as well as waiting for metrics to be ready.
 func New(cfg *config.Config) *Bridge {
+	opts := cfg.MQTT.ClientOptions().SetWill(
+		cfg.MQTT.BirthWillTopic, "offline", 1, true,
+	)
+	client := mqtt.NewClient(opts)
+	return NewWithClient(cfg, client)
+}
+
+// NewWithClient returns a new Bridge with the provided config and [mqtt.Client].
+// The bridge must have [Bridge.Connect] and [Bridge.Ready] called on it before it may be used.
+// This follows the convention of [mqtt.NewClient] as well as waiting for metrics to be ready.
+func NewWithClient(cfg *config.Config, c mqtt.Client) *Bridge {
 	if cfg.MQTT.LogLevel <= log.LevelError {
 		mqtt.ERROR = log.ErrorLogger()
 	}
@@ -75,17 +86,11 @@ func New(cfg *config.Config) *Bridge {
 	if cfg.Discovery.Enabled && cfg.Discovery.DeviceName == "username" {
 		cfg.Discovery.DeviceName = cfg.MQTT.Username
 	}
-	opts := cfg.MQTT.ClientOptions().SetWill(
-		cfg.MQTT.BirthWillTopic, "offline", 1, true,
-	)
-	client := mqtt.NewClient(opts)
-	//client := NewMockClient(opts, true)
-	b := &Bridge{
-		client:       client,
+	return &Bridge{
+		client:       c,
 		m:            metrics.New(cfg),
 		discoveryCfg: &cfg.Discovery,
 	}
-	return b
 }
 
 func (b *Bridge) handleMetric(i int, m metrics.Metric) mqtt.MessageHandler {

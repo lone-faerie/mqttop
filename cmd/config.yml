@@ -16,3 +16,5 @@ net:
   only_physical: true
 disks:
   show_io: true
+battery:
+  interval: 15s

@@ -1,8 +1,12 @@
 package main
 
 import (
-	"github.com/spf13/cobra"
+//	"net/http"
+//	_ "net/http/pprof"
+//	"log"
+
 	"github.com/lone-faerie/mqttop/internal/build"
+	"github.com/spf13/cobra"
 )
 
 type CleanupFunc func() error
@@ -30,5 +34,8 @@ func init() {
 }
 
 func main() {
+//	go func() {
+//		log.Println(http.ListenAndServe("localhost:6060", nil))
+//	}()
 	rootCmd.Execute()
 }

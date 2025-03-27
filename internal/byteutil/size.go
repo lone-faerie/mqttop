@@ -9,8 +9,10 @@ import (
 	"strconv"
 )
 
+// A ByteSize is the human-readable representation of a byte count.
 type ByteSize int
 
+// Binary prefix human-readable sizes.
 const (
 	Bytes ByteSize = 10 * iota
 	KiB
@@ -22,6 +24,8 @@ const (
 
 const UnknownSize ByteSize = -1
 
+// SizeOf returns the largest human-readable ByteSize that can be used to
+// represent v.
 func SizeOf(v uint64) ByteSize {
 	size := ByteSize((bits.Len64(v-1)-1)/10) * 10
 	if size > PiB {
@@ -30,6 +34,7 @@ func SizeOf(v uint64) ByteSize {
 	return size
 }
 
+// ParseSize parses s for the common prefix representation of a ByteSize.
 func ParseSize(s string) (ByteSize, error) {
 	switch s {
 	case "b", "B", "bytes", "Bytes":
@@ -48,6 +53,7 @@ func ParseSize(s string) (ByteSize, error) {
 	return -1, fmt.Errorf("Unknown ByteSize %s", s)
 }
 
+// String returns the string representation of s.
 func (s ByteSize) String() string {
 	switch s {
 	case Bytes:
@@ -66,6 +72,7 @@ func (s ByteSize) String() string {
 	return "Unknown"
 }
 
+// MarshalJSON marshals s into the double-quoted string representation.
 func (s ByteSize) MarshalJSON() ([]byte, error) {
 	switch s {
 	case Bytes:
@@ -84,14 +91,21 @@ func (s ByteSize) MarshalJSON() ([]byte, error) {
 	return nil, fmt.Errorf("Unknown ByteSize %d", s)
 }
 
+// AppendSize appends the string representation of v bytes scaled to size, with
+// 3 decimal places of precision.
 func AppendSize(b []byte, v uint64, size ByteSize) []byte {
+	const overflow = ((1 << 64) - 1) / 1000
 	if size < 0 {
 		size = SizeOf(v)
 	}
 	if size == Bytes {
 		return strconv.AppendUint(b, v, 10)
 	}
-	v = (v * 1000) >> size
+	if v > overflow {
+		v = 1000 * (v >> size)
+	} else {
+		v = (v * 1000) >> size
+	}
 	if v == 0 {
 		return append(b, '0')
 	}
@@ -101,6 +115,8 @@ func AppendSize(b []byte, v uint64, size ByteSize) []byte {
 	return AppendDecimal(b, int64(v), 3)
 }
 
+// WriteSize writes the output of [AppendSize] to w followed by the string
+// representation of size.
 func WriteSize(w io.Writer, v uint64, size ByteSize) (n int, err error) {
 	var b []byte
 	switch buf := w.(type) {
@@ -123,8 +139,10 @@ func WriteSize(w io.Writer, v uint64, size ByteSize) (n int, err error) {
 	return
 }
 
+// A ByteSize is the human-readable representation of a byte count.
 type ByteRate int
 
+// Binary prefix human-readable rates.
 const (
 	Bps ByteRate = 10 * iota
 	KiBps
@@ -134,6 +152,7 @@ const (
 	PiBps
 )
 
+// ParseSize parses s for the common prefix representation of a ByteRate.
 func ParseRate(s string) (ByteRate, error) {
 	switch s {
 	case "Bps", "B/s", "bytes/s", "Bytes/s":
@@ -152,6 +171,7 @@ func ParseRate(s string) (ByteRate, error) {
 	return -1, fmt.Errorf("Unknown ByteRate %s", s)
 }
 
+// String returns the string representation of r.
 func (r ByteRate) String() string {
 	switch r {
 	case Bps:
@@ -170,6 +190,7 @@ func (r ByteRate) String() string {
 	return "Unknown"
 }
 
+// MarshalJSON marshals r into the double-quoted string representation.
 func (r ByteRate) MarshalJSON() ([]byte, error) {
 	switch r {
 	case Bps:

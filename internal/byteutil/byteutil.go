@@ -15,6 +15,8 @@ func lower(c byte) byte {
 	return c | ('x' - 'X')
 }
 
+// Btou is a naive base 10 implementation of [strconv.ParseUint] that assumes
+// all the bytes of b are numerical characters, and ignores any that aren't.
 func Btou(b []byte) uint64 {
 	var u uint64
 	for _, c := range b {
@@ -27,6 +29,8 @@ func Btou(b []byte) uint64 {
 	return u
 }
 
+// Btou is a naive base 10 implementation of [strconv.ParseInt] that assumes
+// all the bytes of b are numerical characters, and ignores any that aren't.
 func Btoi(b []byte) int64 {
 	var neg bool
 loop:
@@ -48,6 +52,8 @@ loop:
 	return int64(u)
 }
 
+// Btou is a naive base 16 implementation of [strconv.ParseUint] that assumes
+// all the bytes of b are numerical characters, and ignores any that aren't.
 func Btox(b []byte) uint64 {
 loop:
 	for i, c := range b {
@@ -57,7 +63,7 @@ loop:
 				b = b[i+2:]
 				break loop
 			}
-		case ('0' <= c && c <= '9') || ('a' <= lower(c) && lower(c) <= 'z'):
+		case ('0' <= c && c <= '9') || ('a' <= lower(c) && lower(c) <= 'f'):
 			b = b[i:]
 			break loop
 		}
@@ -67,14 +73,19 @@ loop:
 		switch {
 		case '0' <= c && c <= '9':
 			c = c - '0'
-		case 'a' <= lower(c) && lower(c) <= 'z':
+		case 'a' <= lower(c) && lower(c) <= 'f':
 			c = c - 'a' + 10
+		default:
+			continue
 		}
 		u = (u << 4) + uint64(c)
 	}
 	return u
 }
 
+// Field splits b by the first ':' and returns the subslice
+// of b before the colon with spaces trimmed and the subslice
+// of b after the colon.
 func Field(b []byte) (key, val []byte) {
 	i := bytes.IndexByte(b, ':')
 	if i < 0 {
@@ -85,29 +96,38 @@ func Field(b []byte) (key, val []byte) {
 	return
 }
 
+// Column splits b by the first space and returns the subslice
+// of b before the space and the remainder of b after the space
+// with spaces trimmed.
 func Column(b []byte) (col, rest []byte) {
 	b = bytes.TrimSpace(b)
 	i := bytes.IndexByte(b, ' ')
 	if i < 0 {
-		return b, b[0:]
+		return b, b[:0]
 	}
 	col = b[:i]
 	rest = bytes.TrimSpace(b[i+1:])
 	return
 }
 
+// ColumnString is the same as [Column] but returns the subslice before the
+// space as a string
 func ColumnString(b []byte) (col string, rest []byte) {
 	var c []byte
 	c, rest = Column(b)
 	return string(c), rest
 }
 
+// Columns splits b into len(dst) columns using [Column] and returns the number
+// columns parsed and the remainder of b.
 func Columns(b []byte, dst ...*[]byte) (n int, rest []byte) {
 	var col []byte
 	rest = b
 	for i := range dst {
 		col, rest = Column(rest)
-		*dst[i] = col
+		if *dst[i] != nil {
+			*dst[i] = col
+		}
 		n++
 		if len(rest) == 0 {
 			return
@@ -116,10 +136,13 @@ func Columns(b []byte, dst ...*[]byte) (n int, rest []byte) {
 	return
 }
 
+// Equal is equivalent to [bytes.Compare](a, b) == 0.
 func Equal(a, b []byte) bool {
 	return bytes.Compare(a, b) == 0
 }
 
+// ToLower is equivalent to [bytes.ToLower] but modifies
+// b in place instead of making a copy.
 func ToLower(b []byte) []byte {
 	for i, c := range b {
 		if 'A' <= c && c <= 'Z' {
@@ -129,6 +152,10 @@ func ToLower(b []byte) []byte {
 	return b
 }
 
+// AppendDecimal appends the string format of the fixed-point
+// number v, with pow places after the deciaml point, to b and
+// returns the extended buffer. The value appended will be padded
+// with 0's to reach the desired decimal places pow.
 func AppendDecimal(b []byte, v int64, pow int) []byte {
 	n := len(b)
 	b = strconv.AppendInt(b, v, 10)
@@ -158,6 +185,7 @@ func AppendDecimal(b []byte, v int64, pow int) []byte {
 	return b
 }
 
+// WriteDecimal writes the output of [AppendDecimal] to w.
 func WriteDecimal(w io.Writer, v int64, pow int) (n int, err error) {
 	var b []byte
 	switch buf := w.(type) {
@@ -170,6 +198,8 @@ func WriteDecimal(w io.Writer, v int64, pow int) (n int, err error) {
 	return w.Write(b)
 }
 
+// TrimByte returns the subslice of b with all leading and trailing
+// occurences of c sliced off.
 func TrimByte(b []byte, c byte) []byte {
 	var start, end int
 	for i := range b {
@@ -187,10 +217,12 @@ func TrimByte(b []byte, c byte) []byte {
 	return b[start:end]
 }
 
+// ToTitle returns the title case representation of b.
 func ToTitle(b []byte) []byte {
 	return cases.Title(language.English).Bytes(b)
 }
 
+// ToTitleString returns the title case representation of s.
 func ToTitleString(s string) string {
 	return cases.Title(language.English).String(s)
 }

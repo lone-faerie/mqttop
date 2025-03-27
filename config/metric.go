@@ -12,6 +12,8 @@ type loader interface {
 	load(*Config) error
 }
 
+// MetricConfig is the base struct for the configuration of
+// any metric.
 type MetricConfig struct {
 	Enabled  bool          `yaml:"enabled"`
 	Interval time.Duration `yaml:"interval,omitempty"`

@@ -54,6 +54,7 @@ var (
 			if err = flagsToConfig(cfg, cmd, args); err != nil {
 				return
 			}
+			log.Info("Config loaded")
 			setLogHandler(cfg.Log.Output, cfg.Log.Format)
 			return
 		},
