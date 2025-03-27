@@ -334,7 +334,6 @@ func (b *Bridge) Discover(ctx context.Context) error {
 		log.Error("Unable to marshal discovery payload", err)
 		return err
 	}
-	log.Println(string(pay))
 	topic, err := disc.Topic(b.discoveryCfg.Prefix)
 	if err != nil {
 		log.Error("Unable to get discovery topic", err)
