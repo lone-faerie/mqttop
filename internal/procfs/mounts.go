@@ -5,9 +5,9 @@ import (
 	"io"
 	"sync"
 
-	"github.com/lone-faerie/mqttop/log"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
 	"github.com/lone-faerie/mqttop/internal/file"
+	"github.com/lone-faerie/mqttop/log"
 )
 
 type Mount struct {

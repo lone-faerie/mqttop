@@ -2,6 +2,7 @@
 [![GitHub License](https://img.shields.io/github/license/lone-faerie/mqttop)](#)
 [![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/lone-faerie/mqttop)](#)
 [![Go Reference](https://pkg.go.dev/badge/github.com/lone-faerie/mqttop.svg)](https://pkg.go.dev/github.com/lone-faerie/mqttop)
+[![Go Report Card](https://goreportcard.com/badge/github.com/lone-faerie/mqttop)](https://goreportcard.com/report/github.com/lone-faerie/mqttop)
 
 # MQTTop
 MQTTop is a bridge to provide top-like system metrics over MQTT. This was mainly designed for use with [Home Assistant](https://www.home-assistant.io) and supports MQTT Discovery, and has currently been tested on Linux and with an NVIDIA GPU.

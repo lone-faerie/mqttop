@@ -1,9 +1,9 @@
 package main
 
 import (
-//	"net/http"
-//	_ "net/http/pprof"
-//	"log"
+	//	"net/http"
+	//	_ "net/http/pprof"
+	//	"log"
 
 	"github.com/lone-faerie/mqttop/internal/build"
 	"github.com/spf13/cobra"
@@ -34,8 +34,8 @@ func init() {
 }
 
 func main() {
-//	go func() {
-//		log.Println(http.ListenAndServe("localhost:6060", nil))
-//	}()
+	//	go func() {
+	//		log.Println(http.ListenAndServe("localhost:6060", nil))
+	//	}()
 	rootCmd.Execute()
 }
