@@ -60,7 +60,7 @@ const bannerTmpl = `┌───────────────────
 │                                                            │
 │     Author: lone-faerie                                    │
 │                                                            │
-│     Version: {{printf "%%-12.12s" .Version}}                                  │
+│     Version: {{printf "%%-18.18s" .Version}}                            │
 │     Build Time: %-26.26s                 │
 │                                                            │
 └────────────────────────────────────────────────────────────┘
