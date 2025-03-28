@@ -4,6 +4,8 @@
 FROM golang:1.24 AS build
 
 ARG VERSION
+ARG BUILD_TIME
+ARG GO_BUILD_TAGS=
 
 # Download Go modules
 COPY go.mod go.sum ./
@@ -29,6 +31,7 @@ LABEL org.opencontainers.image.title="mqttop" \
 	org.opencontainers.image.vendor="lone-faerie" \
 	org.opencontainers.image.license="AGPL-3.0" \
 	org.opencontainers.image.version="${VERSION}-gpu" \
+	org.opencontainers.image.created="${BUILD_TIME}" \
 	org.opencontainers.image.source="https://github.com/lone-faerie/mqttop"
 
 WORKDIR /app
