@@ -7,7 +7,7 @@ name: Docker
 
 on:
   push:
-    # branches: [ "main" ]
+    branches: [ "main" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
 
@@ -52,15 +52,20 @@ jobs:
         id: meta
         shell: bash
         run: |
-          REPOSITORY=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "repository=${REPOSITORY}" >> $GITHUB_OUTPUT
-          echo "REPOSITORY: ${REPOSITORY}"
-
           VERSION=$(git describe --always --tags)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "VERSION: ${VERSION}"
 
-          TAGS="${{ env.REGISTRY }}/${REPOSITORY}:latest , ${{ env.REGISTRY }}/${REPOSITORY}:${VERSION}"
+          BUILD_TIME=$(date --rfc-3339=seconds)
+          echo "build_time=${BUILD_TIME}" >> $GITHUB_OUTPUT
+          echo "BUILD_TIME: ${BUILD_TIME}"
+          
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            TAGS="${REGISTRY}/${IMAGE_NAME}:development"
+          else
+            TAGS="${REGISTRY}/${IMAGE_NAME}:latest"
+            TAGS+=" , ${REGISTRY}/${IMAGE_NAME}:${VERSION}"
+          fi
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "TAGS: ${TAGS}"
 
@@ -76,6 +81,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
+            BUILD_TIME=${{ steps.meta.outputs.build_time }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -120,7 +126,16 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "VERSION: ${VERSION}"
 
-          TAGS="${{ env.REGISTRY }}/${REPOSITORY}:gpu , ${{ env.REGISTRY }}/${REPOSITORY}:${VERSION}-gpu"
+          BUILD_TIME=$(date --rfc-3339=seconds)
+          echo "build_time=${BUILD_TIME}" >> $GITHUB_OUTPUT
+          echo "BUILD_TIME: ${BUILD_TIME}"
+          
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            TAGS="${REGISTRY}/${IMAGE_NAME}:development-gpu"
+          else
+            TAGS="${REGISTRY}/${IMAGE_NAME}:gpu"
+            TAGS+=" , ${REGISTRY}/${IMAGE_NAME}:${VERSION}-gpu"
+          fi
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "TAGS: ${TAGS}"
 
@@ -136,5 +151,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
+            BUILD_TIME=${{ steps.meta.outputs.build_time }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
