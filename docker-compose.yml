@@ -1,6 +1,6 @@
 services:
   mqttop:
-    image: ghcr.io/lone-faerie/mqttop:gpu
+    image: ghcr.io/lone-faerie/mqttop:development-gpu
     container_name: mqttop
     environment:
       - MQTTOP_ROOTFS_PATH=/host

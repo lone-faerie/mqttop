@@ -5,7 +5,7 @@ BIN_PATH=${BIN_OUT_DIR}/mqttop
 
 PACKAGE=github.com/lone-faerie/mqttop
 VERSION?=$(shell git describe --always --tags)
-BUILD_TIME=$(subst $(space),T,$(shell date --rfc-3339=seconds))
+BUILD_TIME?=$(subst $(space),T,$(shell date --rfc-3339=seconds))
 
 GO_BUILD_TAGS?=
 comma:=,
@@ -42,6 +42,7 @@ docker: docker-build docker-build-gpu ## Build both docker images
 docker-build: ## Build docker image without GPU support
 	docker buildx build \
 		--build-arg VERSION=${VERSION} \
+		--build-arg BUILD_TIME=${BUILD_TIME} \
 		--tag mqttop \
 		-f Dockerfile \
 		.
@@ -49,6 +50,7 @@ docker-build: ## Build docker image without GPU support
 docker-build-gpu: ## Build docker image with GPU support
 	docker buildx build \
 		--build-arg VERSION=${VERSION} \
+		--build-arg BUILD_TIME=${BUILD_TIME} \
 		--tag mqttop:gpu \
 		-f Dockerfile.gpu \
 		.
