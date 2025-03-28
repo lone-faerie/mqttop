@@ -7,7 +7,7 @@ import (
 
 	"github.com/lone-faerie/mqttop/internal/byteutil"
 	"github.com/lone-faerie/mqttop/internal/file"
-	"github.com/lone-faerie/mqttop/internal/procfs"
+	"github.com/lone-faerie/mqttop/procfs"
 	"github.com/lone-faerie/mqttop/log"
 )
 

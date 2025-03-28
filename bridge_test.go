@@ -25,4 +25,5 @@ func ExampleBridge() {
 		bridge.Discover(ctx)
 	}
 	<-ctx.Done()
+	// Output:
 }

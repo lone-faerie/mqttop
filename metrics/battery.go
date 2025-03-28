@@ -10,7 +10,7 @@ import (
 
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
-	"github.com/lone-faerie/mqttop/internal/sysfs"
+	"github.com/lone-faerie/mqttop/sysfs"
 	"github.com/lone-faerie/mqttop/log"
 )
 

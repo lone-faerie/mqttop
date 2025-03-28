@@ -11,8 +11,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/lone-faerie/mqttop/config/secrets"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
-	"github.com/lone-faerie/mqttop/internal/secrets"
 	"github.com/lone-faerie/mqttop/log"
 )
 
@@ -111,12 +111,7 @@ func (cfg *Config) load() (err error) {
 func expand(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.String:
-		s := v.String()
-		if secret, ok := secrets.CutPrefix(s); ok {
-			s = secrets.MustRead(secret)
-		} else {
-			s = os.ExpandEnv(s)
-		}
+		s := Expand(v.String())
 		v.SetString(s)
 	case reflect.Struct:
 		n := v.NumField()
@@ -134,9 +129,17 @@ func expand(v reflect.Value) {
 	}
 }
 
-// Expand replaces ${var} or $var in each string field of cfg
-// according to the values of the current environment variables, and
-// replaces !secret var according to the file at /run/secret/<var>.
+// Expand replaces ${var} or $var in s according to the values of
+// the current environment variables, and replaces !secret var according
+// to the file at /run/secret/<var>.
+func Expand(s string) string {
+	if secret, ok := secrets.CutPrefix(s); ok {
+		return secrets.MustRead(secret)
+	}
+	return os.ExpandEnv(s)
+}
+
+// Expand calls [Expand] on every string field of cfg.
 func (cfg *Config) Expand() {
 	v := reflect.ValueOf(cfg).Elem()
 	expand(v)

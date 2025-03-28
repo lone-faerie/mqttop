@@ -12,7 +12,7 @@ import (
 	"github.com/lone-faerie/mqttop/log"
 
 	"github.com/lone-faerie/mqttop/internal/byteutil"
-	"github.com/lone-faerie/mqttop/internal/procfs"
+	"github.com/lone-faerie/mqttop/procfs"
 )
 
 // Memory implements the [Metric] interface to provide the system memory

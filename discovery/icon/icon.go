@@ -1,4 +1,6 @@
-// Package icon provides a few useful [Material Design Icons](https://pictogrammers.com/library/mdi/).
+// Package icon provides a few useful [Material Design Icons].
+//
+// [Material Design Icons]: https://pictogrammers.com/library/mdi/
 package icon
 
 // Icon names

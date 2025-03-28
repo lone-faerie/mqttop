@@ -7,7 +7,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/lone-faerie/mqttop/internal/sysfs"
+	"github.com/lone-faerie/mqttop/sysfs"
 )
 
 type Connection [2]string

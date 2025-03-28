@@ -1,3 +1,6 @@
+// Package build provides varaibles that are set at build-time
+// with the -X ldflag. If the values are not given at build-time,
+// they will be determined from [debug.BuildInfo].
 package build
 
 import (
