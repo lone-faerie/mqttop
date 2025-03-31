@@ -447,10 +447,7 @@ func (b *Battery) Stop() {
 func (bat *Battery) String() string {
 	bat.mu.RLock()
 	defer bat.mu.RUnlock()
-	var b strings.Builder
-	b.Write([]byte{' ', ' '})
-	b.WriteString(bat.bat.Kind)
-	return b.String()
+	return bat.bat.Kind
 }
 
 // AppendText implements [encoding/TextAppender]

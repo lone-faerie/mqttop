@@ -313,7 +313,7 @@ func (n *Net) String() string {
 			running++
 		}
 	}
-	return fmt.Sprintf("  %d interfaces (%d running)", len(n.interfaces), running)
+	return fmt.Sprintf("%d interfaces (%d running)", len(n.interfaces), running)
 }
 
 // AppendText implements [encoding/TextAppender]

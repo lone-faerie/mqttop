@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"text/template"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -90,7 +91,7 @@ func (cfg *Config) load() (err error) {
 		v = reflect.ValueOf(cfg).Elem()
 		n = v.NumField()
 	)
-	expand(v)
+	expandValue(v)
 	for i := 0; i < n; i++ {
 		f := v.Field(i)
 		if f.Kind() != reflect.Slice {
@@ -108,7 +109,7 @@ func (cfg *Config) load() (err error) {
 	return
 }
 
-func expand(v reflect.Value) {
+func expandValue(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.String:
 		s := Expand(v.String())
@@ -116,16 +117,16 @@ func expand(v reflect.Value) {
 	case reflect.Struct:
 		n := v.NumField()
 		for i := 0; i < n; i++ {
-			expand(v.Field(i))
+			expandValue(v.Field(i))
 		}
 	case reflect.Slice, reflect.Array:
 		n := v.Len()
 		for i := 0; i < n; i++ {
-			expand(v.Index(i))
+			expandValue(v.Index(i))
 		}
 
 	case reflect.Pointer:
-		expand(v.Elem())
+		expandValue(v.Elem())
 	}
 }
 
@@ -134,7 +135,7 @@ func expand(v reflect.Value) {
 // to the file at /run/secret/<var>.
 func Expand(s string) string {
 	if secret, ok := secrets.CutPrefix(s); ok {
-		return secrets.MustRead(secret)
+		return secrets.MustRead(secret, "")
 	}
 	return os.ExpandEnv(s)
 }
@@ -142,7 +143,7 @@ func Expand(s string) string {
 // Expand calls [Expand] on every string field of cfg.
 func (cfg *Config) Expand() {
 	v := reflect.ValueOf(cfg).Elem()
-	expand(v)
+	expandValue(v)
 }
 
 // Write writes the yaml encoding of cfg to w.
@@ -199,4 +200,26 @@ func (cfg *Config) SetMetrics(name ...string) {
 		enabled := enableAll || slices.Contains(name, tag)
 		v.FieldByIndex(f.Index).FieldByName("MetricConfig").FieldByName("Enabled").SetBool(enabled)
 	}
+}
+
+func templateFuncs() map[string]any {
+	return map[string]any{
+		"cut": func(s, sep string) string {
+			a, b, _ := strings.Cut(s, sep)
+			return a + b
+		},
+		"cutprefix": strings.TrimPrefix,
+		"cutsuffix": strings.TrimSuffix,
+		"replace":   strings.ReplaceAll,
+		"tolower":   strings.ToLower,
+		"totitle":   strings.ToTitle,
+		"toupper":   strings.ToUpper,
+		"trim":      strings.TrimSpace,
+	}
+}
+
+func loadTemplate(name, text string) (*template.Template, error) {
+	t := template.New(name)
+	t.Funcs(templateFuncs())
+	return t.Parse(text)
 }

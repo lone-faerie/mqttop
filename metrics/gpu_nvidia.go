@@ -387,7 +387,9 @@ func (g *NvidiaGPU) Stop() {
 
 // String implements [fmt.Stringer]
 func (g *NvidiaGPU) String() string {
-	return "  " + g.Name
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.Name
 }
 
 // AppendText implements [encoding/TextAppender]

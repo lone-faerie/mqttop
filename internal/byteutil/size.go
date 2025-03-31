@@ -101,14 +101,17 @@ func AppendSize(b []byte, v uint64, size ByteSize) []byte {
 	if size == Bytes {
 		return strconv.AppendUint(b, v, 10)
 	}
+	// Multiplying a large v before shifting will cause overflow, but shifting a small v
+	// before multiplying can make v zero, so we need to determine the order of operations.
 	if v > overflow {
 		v = 1000 * (v >> size)
 	} else {
-		v = (v * 1000) >> size
+		v = (1000 * v) >> size
 	}
 	if v == 0 {
 		return append(b, '0')
 	}
+	// If the decimal places of v are all zero, just append the integer value of v.
 	if v%1000 == 0 {
 		return strconv.AppendUint(b, v/1000, 10)
 	}

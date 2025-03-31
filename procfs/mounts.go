@@ -111,6 +111,7 @@ func fstabDisks() error {
 		}
 		fstab[string(mnt)] = true
 	}
+	log.Debug("procfs.MountInfo", "fstab", fstab)
 	return nil
 }
 
@@ -134,6 +135,7 @@ func findMounts(search map[string]*Mount, valid map[string]bool, useFSTab bool) 
 			break
 		}
 		if err != nil {
+			log.Debug("findMounts", err)
 			return err
 		}
 		cols, line = byteutil.Columns(line, &dev, &mnt, &fstype)
@@ -145,6 +147,7 @@ func findMounts(search map[string]*Mount, valid map[string]bool, useFSTab bool) 
 			Mnt:    string(mnt),
 			FSType: string(fstype),
 		}
+		log.Debug("findMounts", "mnt", info.Mnt, "matchFSTab", useFSTab && fstab[info.Mnt], "matchValid", !useFSTab && valid[info.FSType])
 		if (useFSTab && fstab[info.Mnt]) || (!useFSTab && valid[info.FSType]) {
 			log.Debug("Found disk", "mnt", info.Mnt)
 			search[info.Mnt] = info
@@ -158,6 +161,7 @@ func MountInfo(useFSTab bool) (map[string]*Mount, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Debug("procfs.MountInfo", "validFSTypes", valid)
 	if useFSTab {
 		if err = fstabDisks(); err != nil {
 			return nil, err

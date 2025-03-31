@@ -252,7 +252,6 @@ func (m *Memory) String() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var b strings.Builder
-	b.Write([]byte{' ', ' '})
 	byteutil.WriteSize(&b, m.total, m.size)
 	return b.String()
 }

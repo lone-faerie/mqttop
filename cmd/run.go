@@ -62,7 +62,7 @@ var (
 				return
 			}
 			log.Info("Config loaded")
-			setLogHandler(cfg.Log.Output, cfg.Log.Format)
+			setLogHandler(cfg, log.LevelDebug)
 			return
 		},
 		RunE: runBridge,
@@ -152,9 +152,9 @@ func flagsToConfig(cfg *config.Config, cmd *cobra.Command, args []string) error 
 	return nil
 }
 
-func setLogHandler(output, format string) {
+func setLogHandler(cfg *config.Config, minLevel log.Level) {
 	var w io.Writer
-	switch strings.ToLower(output) {
+	switch strings.ToLower(cfg.Log.Output) {
 	case "", "stderr":
 	case "stdout":
 		w = os.Stdout
@@ -162,7 +162,7 @@ func setLogHandler(output, format string) {
 		log.SetHandler(log.DiscardHandler)
 		return
 	default:
-		f, err := os.Open(output)
+		f, err := os.Open(cfg.Log.Output)
 		if err != nil {
 			log.Error(
 				"Unable to open log file, deferring to stderr",
@@ -171,9 +171,13 @@ func setLogHandler(output, format string) {
 			return
 		}
 		w = f
-		cleanup = append(cleanup, f.Close)
+		cleanup = append(cleanup, func() { f.Close() })
 	}
-	switch strings.ToLower(format) {
+	if cfg.Log.Level < minLevel {
+		cfg.Log.Level = minLevel
+	}
+	log.SetLogLevel(cfg.Log.Level)
+	switch strings.ToLower(cfg.Log.Format) {
 	case "json":
 		if w == nil {
 			w = os.Stderr
@@ -190,7 +194,12 @@ func setLogHandler(output, format string) {
 func printBanner(cmd *cobra.Command) error {
 	t := template.New("banner")
 	template.Must(t.Parse(bannerTemplate()))
-	return t.Execute(cmd.OutOrStdout(), cmd.Root())
+	w := cmd.OutOrStdout()
+	err := t.Execute(w, cmd.Root())
+	/*	if s, ok := w.(interface{ Sync() error }); ok {
+		s.Sync()
+	}*/
+	return err
 }
 
 func runBridge(cmd *cobra.Command, _ []string) error {

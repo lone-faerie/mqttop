@@ -451,7 +451,7 @@ func (c *CPU) Stop() {
 func (c *CPU) String() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return fmt.Sprintf("  %s\n  %d cores", c.Name, len(c.cores))
+	return fmt.Sprintf("%s\n%d cores", c.Name, len(c.cores))
 }
 
 func (c *cpuCore) AppendText(b []byte, flags cpuFlag) []byte {

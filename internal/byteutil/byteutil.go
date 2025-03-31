@@ -125,7 +125,7 @@ func Columns(b []byte, dst ...*[]byte) (n int, rest []byte) {
 	rest = b
 	for i := range dst {
 		col, rest = Column(rest)
-		if *dst[i] != nil {
+		if dst[i] != nil {
 			*dst[i] = col
 		}
 		n++

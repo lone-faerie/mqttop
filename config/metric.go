@@ -163,28 +163,6 @@ var defaultGPU = GPUConfig{
 	},
 }
 
-func templateFuncs() map[string]any {
-	return map[string]any{
-		"cut": func(s, sep string) string {
-			a, b, _ := strings.Cut(s, sep)
-			return a + b
-		},
-		"cutprefix": strings.TrimPrefix,
-		"cutsuffix": strings.TrimSuffix,
-		"replace":   strings.ReplaceAll,
-		"tolower":   strings.ToLower,
-		"totitle":   strings.ToTitle,
-		"toupper":   strings.ToUpper,
-		"trim":      strings.TrimSpace,
-	}
-}
-
-func loadTemplate(name, text string) (*template.Template, error) {
-	t := template.New(name)
-	t.Funcs(templateFuncs())
-	return t.Parse(text)
-}
-
 func (cfg *CPUConfig) load(_ *Config) error {
 	if !cfg.Enabled || cfg.NameTemplate == "" {
 		return nil

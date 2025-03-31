@@ -81,6 +81,7 @@ func NewDisks(cfg *config.Config) (*Disks, error) {
 	if err := d.rescan(true); err != nil {
 		return nil, errNotSupported(d.Type(), err)
 	}
+	log.Info("Found disks", "count", len(d.disks))
 	if cfg.Disks.Interval > 0 {
 		d.interval = cfg.Disks.Interval
 	} else {
@@ -191,6 +192,7 @@ func (d *Disks) rescan(firstRun bool) error {
 	if err != nil {
 		return err
 	}
+	log.Debug("procfs.MountInfo", "count", len(mnts))
 	if firstRun {
 		d.disks = make(map[string]*Disk, len(mnts))
 	}
@@ -215,7 +217,7 @@ func (d *Disks) rescan(firstRun bool) error {
 				disk.size = byteutil.SizeOf(disk.total >> 2)
 			}
 			if firstRun {
-				disk.total = 0
+				disk.used = 0
 			}
 			d.disks[name] = disk
 		}
@@ -278,11 +280,10 @@ func (d *Disks) String() string {
 		if !first {
 			b.WriteByte('\n')
 		}
-		b.Write([]byte{' ', ' '})
 		b.WriteString(disk.Name)
 		b.Write([]byte{' ', '('})
 		b.WriteString(disk.Mnt)
-		b.Write([]byte{')', '\n', ' ', ' ', ' ', ' '})
+		b.Write([]byte{')', '\n', ' ', ' '})
 		byteutil.WriteSize(&b, disk.total, disk.size)
 		first = false
 	}
