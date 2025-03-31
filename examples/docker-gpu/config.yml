@@ -1,0 +1,15 @@
+interval: 2s
+mqtt:
+  broker:  <mqtt broker address>:1883
+  username: <mqtt username>
+  password: <mqtt password>
+  log_level: DISABLED
+discovery:
+  wait_topic: homeassistant/status
+  wait_payload: online
+net:
+  only_physical: true
+disks:
+  show_io: true
+battery:
+  interval: 15s
