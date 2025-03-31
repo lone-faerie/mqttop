@@ -4,6 +4,9 @@ services:
     container_name: mqttop
     environment:
       - MQTTOP_ROOTFS_PATH=/host
+      - MQTTOP_BROKER_ADDRESS="127.0.0.1:1883"
+      - MQTTOP_BROKER_USERNAME=mqttop
+      - MQTTOP_BROKER_PASSWORD=password
     volumes:
       - "./cmd/config.yml:/config/config.yml"
       - "/:/host:ro"

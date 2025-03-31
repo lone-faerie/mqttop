@@ -63,6 +63,8 @@ var (
 			}
 			log.Info("Config loaded")
 			setLogHandler(cfg, log.LevelDebug)
+			log.Debug("MQTT broker", "addr", cfg.MQTT.Broker)
+
 			return
 		},
 		RunE: runBridge,

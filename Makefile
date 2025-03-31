@@ -54,3 +54,12 @@ docker-build-gpu: ## Build docker image with GPU support
 		--tag mqttop:gpu \
 		-f Dockerfile.gpu \
 		.
+
+docker-debug-gpu:
+	docker buildx build \
+		--build-arg VERSION=${VERSION} \
+		--build-arg BUILD_TIME=${BUILD_TIME} \
+		--build-arg GO_BUILD_TAGS=debug \
+		--tag mqttop:development-gpu \
+		-f Dockerfile.gpu \
+		.
