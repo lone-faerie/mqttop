@@ -2,6 +2,12 @@ package discovery
 
 type Option string
 
+// Shared root level options
+const (
+	optDevice Option = "dev"
+	optOrigin Option = "o"
+)
+
 // Options for origin
 const (
 	Name       Option = "name"

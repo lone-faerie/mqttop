@@ -22,6 +22,7 @@ const (
 	batteryTime
 )
 
+// Batt contains the paths to information for the battery.
 type Batt struct {
 	capacity    string
 	chargeNow   string
@@ -70,6 +71,8 @@ func findBattery() {
 	batteryDir, batteryErr = getBattery()
 }
 
+// Battery returns the directory to the system's battery.
+// If there is no battery on the system, Battery returns [fs.ErrNotExist]
 func Battery() (*Dir, error) {
 	batteryOnce.Do(findBattery)
 	if batteryErr != nil {
@@ -78,6 +81,9 @@ func Battery() (*Dir, error) {
 	return file.OpenDir(batteryDir)
 }
 
+// GetBattery finds the system's battery and determines its supported
+// features. If the is no battery on the system, GetBattery returns
+// [fs.ErrNotExist]
 func GetBattery() (*Batt, error) {
 	dir, err := getBattery()
 	if err != nil {
@@ -133,10 +139,13 @@ func GetBattery() (*Batt, error) {
 	return &b, nil
 }
 
+// ReadCapacity returns the contents of /sys/class/power_supply/<battery>/capacity.
 func (b *Batt) ReadCapacity() (int64, error) {
 	return file.ReadInt(b.capacity)
 }
 
+// ReadCharge returns the contents of /sys/class/power_supply/<battery>/charge_now and
+// /sys/class/power_supply/<battery>/charge_full.
 func (b *Batt) ReadCharge() (now, full int64, err error) {
 	if now, err = file.ReadInt(b.chargeNow); err != nil {
 		return
@@ -145,6 +154,8 @@ func (b *Batt) ReadCharge() (now, full int64, err error) {
 	return
 }
 
+// ReadEnergy returns the contents of /sys/class/power_supply/<battery>/energy_now and
+// /sys/class/power_supply/<battery>/energy_full.
 func (b *Batt) ReadEnergy() (now, full int64, err error) {
 	if now, err = file.ReadInt(b.energyNow); err != nil {
 		return
@@ -153,54 +164,69 @@ func (b *Batt) ReadEnergy() (now, full int64, err error) {
 	return
 }
 
+// ReadPower returns the contents of /sys/class/power_supply/<battery>/power_now.
 func (b *Batt) ReadPower() (int64, error) {
 	return file.ReadInt(b.powerNow)
 }
 
+// ReadCurrent returns the contents of /sys/class/power_supply/<battery>/current_now.
 func (b *Batt) ReadCurrent() (int64, error) {
 	return file.ReadInt(b.currentNow)
 }
 
+// ReadVoltage returns the contents of /sys/class/power_supply/<battery>/voltage_now.
 func (b *Batt) ReadVoltage() (int64, error) {
 	return file.ReadInt(b.voltageNow)
 }
 
+// ReadStatus returns the contents of /sys/class/power_supply/<battery>/status.
 func (b *Batt) ReadStatus() (string, error) {
 	return file.ReadLower(b.status)
 }
 
+// ReadTimeRemaining returns the contents of /sys/class/power_supply/<battery>/time_to_empty.
 func (b *Batt) ReadTimeRemaining() (int64, error) {
 	return file.ReadInt(b.timeToEmpty)
 }
 
+// HasCapacity returns true if b supports reading capacity.
 func (b *Batt) HasCapacity() bool {
 	return b.flags&batteryCapacity == batteryCapacity
 }
 
+// HasCharge returns true if b supports reading charge.
 func (b *Batt) HasCharge() bool {
 	return b.flags&batteryCharge == batteryCharge
 }
 
+// HasEnergy returns true if b supports reading energy.
 func (b *Batt) HasEnergy() bool {
 	return b.flags&batteryEnergy == batteryEnergy
 }
 
+// HasPower returns true if b supports reading power.
 func (b *Batt) HasPower() bool {
 	return b.flags&batteryPower == batteryPower
 }
 
+// HasCurrent returns true if b supports reading current.
 func (b *Batt) HasCurrent() bool {
 	return b.flags&batteryCurrent == batteryCurrent
 }
 
+// HasVoltage returns true if b supports reading voltage.
 func (b *Batt) HasVoltage() bool {
 	return b.flags&batteryVoltage == batteryVoltage
 }
 
+// HasTimeRemaining returns true if b supports reading time remaining.
 func (b *Batt) HasTimeRemaining() bool {
 	return b.flags&batteryTime == batteryTime
 }
 
+// Capacity returns the capacity of the battery. If b supports
+// reading capacity, it is returned directly. Otherwise, the capacity
+// is calculated from either charge or energy.
 func (b *Batt) Capacity() (int, error) {
 	var now, full string
 	switch {
@@ -230,6 +256,8 @@ func (b *Batt) Capacity() (int, error) {
 	return int(100 * n / f), nil
 }
 
+// Status returns the current status of b. One of "charging", "discharging", "not charging"
+// "full", or "unknown".
 func (b *Batt) Status() (string, error) {
 	stat, err := file.ReadLower(b.status)
 	if err == nil {
@@ -238,6 +266,9 @@ func (b *Batt) Status() (string, error) {
 	return stat, err
 }
 
+// EstTimeRemaining returns the estimated time remaining of the battery life. This is calculated
+// from either energy divied by power, charge divided by current, or the value of
+// /sys/class/power_supply/<battery>/time_to_empty
 func (b *Batt) EstTimeRemaining() (time.Duration, error) {
 	const scale = uint64(time.Hour)
 	var xp, yp string

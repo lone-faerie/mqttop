@@ -31,6 +31,9 @@ clean: ## Clean output directory
 build: ## Build binary
 	go build ${GO_BUILD_FLAGS} -o ${BIN_PATH} ./cmd
 
+install: clean build ## Build and install binary
+	cp ${BIN_PATH} /usr/local/bin/mqttop
+
 debug: ## Build binary with 'debug' tag
 	go build -tags $(subst $(space),$(comma),$(strip $(GO_BUILD_TAGS) debug)) -ldflags="${LDFLAGS}" -o ${BIN_PATH} ./cmd
 

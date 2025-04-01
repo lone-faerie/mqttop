@@ -30,6 +30,7 @@ type MQTTConfig struct {
 type DiscoveryConfig struct {
 	Enabled      bool   `yaml:"enabled"`
 	Prefix       string `yaml:"prefix"`
+	Method       string `yaml:"method"`
 	DeviceName   string `yaml:"device_name,omitempty"`
 	NodeID       string `yaml:"node_id,omitempty"`
 	Availability string `yaml:"availability_topic,omitempty"`
@@ -49,9 +50,11 @@ var defaultMQTT = MQTTConfig{
 }
 
 var defaultDiscovery = DiscoveryConfig{
-	Enabled:  true,
-	Prefix:   "homeassistant",
-	Retained: true,
+	Enabled:      true,
+	Prefix:       "homeassistant",
+	Method:       "device",
+	Availability: "mqttop/bridge/status",
+	Retained:     true,
 }
 
 func (cfg *MQTTConfig) ClientOptions() *mqtt.ClientOptions {

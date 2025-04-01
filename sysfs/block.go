@@ -7,10 +7,11 @@ import (
 
 	"github.com/lone-faerie/mqttop/internal/byteutil"
 	"github.com/lone-faerie/mqttop/internal/file"
-	"github.com/lone-faerie/mqttop/procfs"
 	"github.com/lone-faerie/mqttop/log"
+	"github.com/lone-faerie/mqttop/procfs"
 )
 
+// BlockIO represents the reads and writes of a block device.
 type BlockIO struct {
 	old blockIO
 

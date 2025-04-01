@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -85,6 +86,9 @@ func NewWithClient(cfg *config.Config, c mqtt.Client) *Bridge {
 	}
 	if cfg.Discovery.Enabled && cfg.Discovery.DeviceName == "username" {
 		cfg.Discovery.DeviceName = cfg.MQTT.Username
+	}
+	if cfg.Discovery.Availability == "" {
+		cfg.Discovery.Availability = cfg.MQTT.BirthWillTopic
 	}
 	return &Bridge{
 		client:       c,
@@ -274,80 +278,39 @@ func (b *Bridge) Disconnect() {
 	log.Debug("Disconnected")
 }
 
-func (b *Bridge) waitDiscover(ctx context.Context) error {
-	if b.discoveryCfg.WaitTopic == "" {
-		log.Debug("Not waiting before discovery")
-		return nil
-	}
-	ch := make(chan error)
-	defer close(ch)
-	handler := func(_ mqtt.Client, msg mqtt.Message) {
-		msg.Ack()
-		if string(msg.Payload()) == b.discoveryCfg.WaitPayload {
-			t := b.client.Unsubscribe(b.discoveryCfg.WaitTopic)
-			select {
-			case <-ctx.Done():
-			case <-t.Done():
-			}
-			select {
-			case ch <- t.Error():
-			default:
-			}
+// Discover publishes the discovery payload(s) for Home Assistant MQTT discovery after
+// optionally waiting for a payload on the given wait topic. If path is a non-empty
+// string, the previous discovery is loaded from the file at path for removing old
+// components.
+func (b *Bridge) Discover(ctx context.Context, path string) (err error) {
+	var old, d *discovery.Discovery
+	if path != "" {
+		old, err = discovery.Load(path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
-	t := b.client.Subscribe(b.discoveryCfg.WaitTopic, 0, handler)
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-t.Done():
-	}
-	if err := t.Error(); err != nil {
-		return err
-	}
-	return <-ch
-}
-
-// Discover publishes the discovery payload for Home Assistant MQTT discovery after
-// optionally waiting for a payload on the given wait topic.
-func (b *Bridge) Discover(ctx context.Context) error {
-	if err := b.waitDiscover(ctx); err != nil {
-		log.Warn("Could not wait for discovery", err)
-		return err
-	}
-	select {
-	case <-ctx.Done():
-		return nil
-	default:
-	}
-	disc, err := discovery.New(b.discoveryCfg)
+	d, err = discovery.New(b.discoveryCfg)
 	if err != nil {
-		log.Error("Unable to get discovery", err)
 		return err
 	}
-	for _, metric := range b.m {
-		if d, ok := metric.(discovery.Discoverer); ok {
-			d.Discover(disc)
+	for _, m := range b.m {
+		if dd, ok := m.(discovery.Discoverer); ok {
+			dd.Discover(d)
 		}
 	}
-	pay, err := json.Marshal(disc)
-	if err != nil {
-		log.Error("Unable to marshal discovery payload", err)
+	//delete(d.Components, d.Origin.Name+"_battery_state")
+	var migrate bool
+	if old != nil {
+		migrate = d.Diff(old)
+	}
+	if err = d.Publish(ctx, b.client, migrate); err != nil {
+		log.Error("Unable to perform discovery", err)
 		return err
 	}
-	topic, err := disc.Topic(b.discoveryCfg.Prefix)
-	if err != nil {
-		log.Error("Unable to get discovery topic", err)
-		return err
+	if path != "" {
+		err = d.Write(path)
 	}
-	t := b.client.Publish(topic, b.discoveryCfg.QoS, b.discoveryCfg.Retained, pay)
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-t.Done():
-	}
-	log.Info("discovery finished")
-	if err = t.Error(); err != nil {
-		log.Warn("Unable to publish discovery", err)
-	}
-	return err
+	log.Info("Discovery complete")
+	return
 }

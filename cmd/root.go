@@ -8,31 +8,35 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type CleanupFunc func()
+var cleanup []func()
 
-var cleanup []CleanupFunc
-
-var (
-	rootCmd = &cobra.Command{
-		Use:     "mqttop [-c config]...",
-		Short:   "Provide system metrics over MQTT",
-		Version: build.Version(),
-		PersistentPostRun: func(_ *cobra.Command, _ []string) {
-			for _, f := range cleanup {
-				f()
-			}
-		},
-		CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
-		SilenceErrors:     true,
-		SilenceUsage:      true,
-	}
-)
+// RootCommand is the root [cobra.Command] of the program.
+var RootCommand = &cobra.Command{
+	Use:     "mqttop [-c config]...",
+	Short:   "Provide system metrics over MQTT",
+	Version: build.Version(),
+	PersistentPostRun: func(_ *cobra.Command, _ []string) {
+		for _, f := range cleanup {
+			f()
+		}
+	},
+	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
+	SilenceErrors:     true,
+	SilenceUsage:      true,
+}
 
 func init() {
-	rootCmd.SetVersionTemplate(bannerTemplate())
-	rootCmd.AddGroup(
+	cobra.EnableCommandSorting = false
+	RootCommand.SetVersionTemplate(BannerTemplate())
+	RootCommand.AddGroup(
 		&cobra.Group{"commands", "Commands:"},
 	)
+}
+
+// AddCleanup adds function(s) to be run as part of the PersistentPostRun of
+// [RootCommand]
+func AddCleanup(f ...func()) {
+	cleanup = append(cleanup, f...)
 }
 
 const banner = `┌────────────────────────────────────────────────────────────┐
@@ -52,22 +56,24 @@ const banner = `┌────────────────────�
 └────────────────────────────────────────────────────────────┘
 `
 
-func bannerTemplate() string {
+// BannerTemplate returns the string used for templating the banner.
+func BannerTemplate() string {
 	return fmt.Sprintf(banner, build.BuildTime())
 }
 
-type exitErr struct {
+// ExitErr is an error that should cause the program to exit with the given code.
+type ExitErr struct {
 	Err  error
 	Code int
 }
 
-func (e *exitErr) Error() string {
+func (e *ExitErr) Error() string {
 	return e.Err.Error()
 }
 
 func main() {
-	if c, err := rootCmd.ExecuteC(); err != nil {
-		if exit, ok := err.(*exitErr); ok {
+	if c, err := RootCommand.ExecuteC(); err != nil {
+		if exit, ok := err.(*ExitErr); ok {
 			os.Exit(exit.Code)
 		}
 		c.PrintErrln("Error:", err)

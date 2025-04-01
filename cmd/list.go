@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 
@@ -12,24 +13,62 @@ import (
 	"github.com/lone-faerie/mqttop/metrics"
 )
 
-var listCmd = &cobra.Command{
+// Flags for [ListCommand]
+var (
+	ListSummary bool // Display a summary of available metrics
+)
+
+// ListCommand is the [cobra.Command] used for listing available metrics.
+var ListCommand = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"l"},
 	Short:   "List available metrics",
-	Run:     listMetrics,
+	RunE:    listMetrics,
 }
 
 func init() {
-	listCmd.Flags().BoolP("summary", "s", false, "display a summary of available metrics")
-	listCmd.Flags().StringSliceVarP(&cfgPath, "config", "c", nil, "Path(s) to config file/directory")
+	ListCommand.Flags().SortFlags = false
+	ListCommand.Flags().StringSliceVarP(&ConfigPath, "config", "c", nil, "Path(s) to config file/directory")
+	ListCommand.Flags().BoolVarP(&ListSummary, "summary", "s", false, "Display a summary of available metrics")
 
-	rootCmd.AddCommand(listCmd)
+	RootCommand.AddCommand(ListCommand)
 }
 
-func listMetrics(cmd *cobra.Command, args []string) {
+func printMetrics(w io.Writer, mm []metrics.Metric, args []string) {
+	r := strings.NewReplacer("\n", "\n  ")
+	for _, m := range mm {
+		if len(args) > 0 && !slices.Contains(args, m.Type()) {
+			continue
+		}
+		fmt.Fprintf(w, "[%s]\n  ", m.Type())
+		r.WriteString(w, m.String())
+		w.Write([]byte{'\n'})
+	}
+}
+
+func printSummary(w io.Writer, mm []metrics.Metric, args []string) {
+	for i, m := range mm {
+		if len(args) > 0 && !slices.Contains(args, m.Type()) {
+			continue
+		}
+		if i > 0 {
+			w.Write([]byte{',', ' '})
+		}
+		w.Write([]byte(m.Type()))
+		if d, ok := m.(*metrics.Dir); ok {
+			fmt.Fprintf(w, " (%s)", d)
+		}
+	}
+	w.Write([]byte{'\n'})
+}
+
+func listMetrics(cmd *cobra.Command, args []string) (err error) {
 	log.SetLogLevel(log.LevelWarn)
-	if len(cfgPath) > 0 {
-		cfg, _ = config.Load(cfgPath...)
+	if len(ConfigPath) > 0 {
+		cfg, err = config.Load(ConfigPath...)
+		if err != nil {
+			return
+		}
 		setLogHandler(cfg, log.LevelWarn)
 	} else {
 		cfg = config.Default()
@@ -38,37 +77,13 @@ func listMetrics(cmd *cobra.Command, args []string) {
 	slices.SortFunc(mm, func(a, b metrics.Metric) int {
 		return strings.Compare(a.Type(), b.Type())
 	})
-	cleanup = append(cleanup, func() { metrics.Stop(mm...) })
+	// Nvidia GPU needs to be stopped, so we just stop all metrics when done
+	AddCleanup(func() { metrics.Stop(mm...) })
 
-	summary, _ := cmd.Flags().GetBool("summary")
-
-	w := cmd.OutOrStdout()
-	var r *strings.Replacer
-	if !summary {
-		r = strings.NewReplacer("\n", "\n  ")
+	if ListSummary {
+		printSummary(cmd.OutOrStdout(), mm, args)
+	} else {
+		printMetrics(cmd.OutOrStdout(), mm, args)
 	}
-
-	first := true
-	for _, m := range mm {
-		if len(args) > 0 && !slices.Contains(args, m.Type()) {
-			continue
-		}
-		if summary {
-			if !first {
-				w.Write([]byte{',', ' '})
-			}
-			w.Write([]byte(m.Type()))
-			if d, ok := m.(*metrics.Dir); ok {
-				fmt.Fprintf(w, " (%s)", d)
-			}
-		} else {
-			if !first {
-				w.Write([]byte{'\n'})
-			}
-			fmt.Fprintf(w, "[%s]\n  ", m.Type())
-			r.WriteString(w, m.String())
-		}
-		first = false
-	}
-	w.Write([]byte{'\n'})
+	return nil
 }

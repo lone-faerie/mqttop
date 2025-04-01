@@ -1,12 +1,16 @@
-// Package discovery provides structures to support Home Assistant MQTT Discovery/
+// Package discovery provides structures to support Home Assistant MQTT Discovery.
 package discovery
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"slices"
 	"strings"
 
+	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/lone-faerie/mqttop/config"
-	"github.com/lone-faerie/mqttop/internal/build"
 )
 
 // Home Assistant entity platforms
@@ -27,7 +31,7 @@ type Component map[Option]any
 // Discoverer is the interface that is implemented by a value to add it to the discovery
 // payload. Implementations should add each of its Components to the provided Discovery's Components field using unique keys.
 type Discoverer interface {
-	Discover(*Discovery)
+	Discover(d *Discovery)
 }
 
 // Discovery is the struct that is encoded into the device discovery payload.
@@ -41,10 +45,25 @@ type Discovery struct {
 	AvailabilityTopic string `json:"-"`
 	ObjectID          string `json:"-"`
 	NodeID            string `json:"-"`
+	Method            string `json:"_method,omitempty"`
+}
+
+// Load returns the decoded value of a discovery payload at the file path.
+func Load(path string) (*Discovery, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	d := &Discovery{}
+	if err := json.NewDecoder(f).Decode(d); err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // New returns a new Discovery struct initialized from the provided config and components.
-func New(cfg *config.DiscoveryConfig, cmps ...Discoverer) (*Discovery, error) {
+func New(cfg *config.DiscoveryConfig) (*Discovery, error) {
 	dev, err := NewDevice()
 	if err != nil {
 		return nil, err
@@ -61,9 +80,11 @@ func New(cfg *config.DiscoveryConfig, cmps ...Discoverer) (*Discovery, error) {
 	d := &Discovery{
 		Origin:            NewOrigin(),
 		Device:            dev,
-		Components:        make(map[string]Component, len(cmps)),
+		Components:        make(map[string]Component),
 		NodeID:            cfg.NodeID,
 		AvailabilityTopic: cfg.Availability,
+		cfg:               cfg,
+		Method:            cfg.Method,
 	}
 	if d.NodeID == "" {
 		d.NodeID = "mqttop"
@@ -81,15 +102,15 @@ func New(cfg *config.DiscoveryConfig, cmps ...Discoverer) (*Discovery, error) {
 	default:
 		return nil, errors.New("No object id")
 	}
-	for i := range cmps {
-		cmps[i].Discover(d)
-	}
 	return d, nil
 }
 
 // Topic returns the topic to publish the discovery payload to using the provided prefix.
-func (d *Discovery) Topic(prefix string) (string, error) {
-	elems := []string{prefix, "device", d.NodeID, d.ObjectID, "config"}
+func (d *Discovery) Topic(prefix, component, objectID string) (string, error) {
+	if objectID == "" {
+		objectID = d.ObjectID
+	}
+	elems := []string{prefix, component, d.NodeID, objectID, "config"}
 	return strings.Join(elems, "/"), nil
 }
 
@@ -100,23 +121,243 @@ func (d *Discovery) SetAvailability(avail Component) {
 	}
 }
 
-// Origin implements the origin mapping for the discovery payload. This provides context to
-// Home Assistant on the origin of the components.
-type Origin struct {
-	Name       string `json:"name"`
-	SWVersion  string `json:"sw,omitempty"`
-	SupportURL string `json:"url,omitempty"`
+// Write writes the json-encoded value of d to path.
+func (d *Discovery) Write(path string) error {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	f.Truncate(0)
+	f.Seek(0, 0)
+	e := json.NewEncoder(f)
+	e.SetIndent("", "  ")
+	return e.Encode(d)
 }
 
-// NewOrigin returns the default Origin with the following values:
-// - Name: "mqttop"
-// - SWVersion: [build.Version()]
-// - SupportURL: "https://github.com/lone-faerie/mqttop"
-func NewOrigin() *Origin {
-	o := &Origin{
-		Name:       "mqttop",
-		SWVersion:  build.Version(),
-		SupportURL: "https://" + build.Package(),
+// Wait blocks until the given payload is received on the wait topic, if defined,
+// otherwise Wait returns immediately.
+func (d *Discovery) Wait(ctx context.Context, c mqtt.Client) error {
+	if d.cfg.WaitTopic == "" {
+		return nil
 	}
-	return o
+	ch := make(chan error)
+	defer close(ch)
+	t := c.Subscribe(d.cfg.WaitTopic, 0, func(_ mqtt.Client, msg mqtt.Message) {
+		msg.Ack()
+		if d.cfg.WaitPayload == "" || string(msg.Payload()) == d.cfg.WaitPayload {
+			t := c.Unsubscribe(d.cfg.WaitTopic)
+			select {
+			case <-ctx.Done():
+			case <-t.Done():
+			}
+			select {
+			case ch <- t.Error():
+			default:
+			}
+		}
+	})
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-t.Done():
+	}
+	if err := t.Error(); err != nil {
+		return err
+	}
+	return <-ch
+}
+
+func (d *Discovery) publishDevice(ctx context.Context, c mqtt.Client, migrate bool) error {
+	if migrate {
+		if err := d.Migrate(ctx, c); err != nil {
+			return err
+		}
+	}
+	payload, err := json.Marshal(d)
+	if err != nil {
+		return err
+	}
+	topic, err := d.Topic(d.cfg.Prefix, "device", d.ObjectID)
+	if err != nil {
+		return err
+	}
+	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-t.Done():
+	}
+	if err := t.Error(); err != nil {
+		return err
+	}
+	if migrate {
+		return d.removeComponents(ctx, c)
+	}
+	return nil
+}
+
+func (d *Discovery) publishComponents(ctx context.Context, c mqtt.Client, migrate bool, components ...string) (err error) {
+	if migrate {
+		if err = d.Rollback(ctx, c); err != nil {
+			return
+		}
+	}
+	var payload []byte
+	for name, cmp := range d.Components {
+		if len(components) > 0 && !slices.Contains(components, name) {
+			continue
+		}
+		platform := cmp[Platform].(string)
+		if len(cmp) == 1 {
+			payload = []byte{}
+		} else {
+			delete(cmp, Platform)
+			cmp[optOrigin] = d.Origin
+			cmp[optDevice] = d.Device
+			payload, err = json.Marshal(cmp)
+			if err != nil {
+				return err
+			}
+			cmp[Platform] = platform
+			delete(cmp, optOrigin)
+			delete(cmp, optDevice)
+		}
+		topic, err := d.Topic(d.cfg.Prefix, platform, name)
+		if err != nil {
+			return err
+		}
+		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.Done():
+		}
+		if err := t.Error(); err != nil {
+			return err
+		}
+	}
+	if migrate {
+		return d.removeDevice(ctx, c)
+	}
+	return nil
+}
+
+// Publish publishes the discovery payload. If migrate is true, Publish migrates the discovery payload
+// either from a device discovery to individual component discoveries, or from individual component
+// discoveries to a device discovery.
+func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool) (err error) {
+	if err = d.Wait(ctx, c); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+	method := d.Method
+	d.Method = ""
+	switch method {
+	case "", "device":
+		err = d.publishDevice(ctx, c, migrate)
+	case "components":
+		err = d.publishComponents(ctx, c, migrate)
+	}
+	d.Method = method
+	return
+}
+
+// Diff adds an empty component to d for each component in old that
+// isn't already in d. Diff returns true if d should be migrated.
+func (d *Discovery) Diff(old *Discovery) bool {
+	for name, cmp := range old.Components {
+		if _, ok := d.Components[name]; ok || len(cmp) <= 1 {
+			continue
+		}
+		d.Components[name] = Component{
+			Platform: cmp[Platform],
+		}
+	}
+	return ((d.Method == "" || d.Method == "device") && !(old.Method == "" || old.Method == "device")) ||
+		(d.Method == "components" && old.Method != "components")
+}
+
+func (d *Discovery) removeComponents(ctx context.Context, c mqtt.Client, components ...string) error {
+	payload := []byte{}
+	for name, cmp := range d.Components {
+		if len(components) > 0 && !slices.Contains(components, name) {
+			continue
+		}
+		platform := cmp[Platform].(string)
+		topic, err := d.Topic(d.cfg.Prefix, platform, name)
+		if err != nil {
+			return err
+		}
+		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.Done():
+		}
+		if err := t.Error(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *Discovery) removeDevice(ctx context.Context, c mqtt.Client) error {
+	topic, err := d.Topic(d.cfg.Prefix, "device", d.ObjectID)
+	if err != nil {
+		return err
+	}
+	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, []byte{})
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-t.Done():
+	}
+	return t.Error()
+}
+
+// Migrate publishes `{"migrate_discovery": true}` to each component's
+// discovery topic. This is the first step required for migrating
+// component discoveries to a device discovery.
+func (d *Discovery) Migrate(ctx context.Context, c mqtt.Client) error {
+	migrate := []byte("{\"migrate_discovery\": true}")
+	for name, cmp := range d.Components {
+		platform := cmp[Platform].(string)
+		topic, err := d.Topic(d.cfg.Prefix, platform, name)
+		if err != nil {
+			return err
+		}
+		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, migrate)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.Done():
+		}
+		if err := t.Error(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Rollback publishes `{"migrate_discovery": true}` to the device discovery topic.
+// This is the first step required for rolling back a device discovery to individual
+// component discoveries.
+func (d *Discovery) Rollback(ctx context.Context, c mqtt.Client) error {
+	migrate := []byte("{\"migrate_discovery\": true}")
+	topic, err := d.Topic(d.cfg.Prefix, "device", d.ObjectID)
+	if err != nil {
+		return err
+	}
+	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, migrate)
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-t.Done():
+	}
+	return t.Error()
 }

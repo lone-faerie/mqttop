@@ -21,104 +21,101 @@ import (
 	"github.com/lone-faerie/mqttop/log"
 )
 
+// Flags for [RunCommand]
 var (
-	cfgPath []string
-	cfg     *config.Config
+	ConfigPath []string      // Path(s) to config file/directory (default is first of $MQTTOP_CONFIG_FILE, $XDG_CONFIG_HOME/mqttop.yaml, $HOME/.config/mqttop.yaml)
+	Broker     string        // MQTT broker address
+	Port       int           // MQTT broker port
+	Username   string        // MQTT broker username
+	Password   string        // MQTT broker password
+	Interval   time.Duration // Update interval
+	Discovery  string        // Discovery prefix, or 'disabled' to disable
+	LogLevel   string        // Log level
 )
 
-var (
-	broker    string
-	port      int
-	username  string
-	password  string
-	interval  time.Duration
-	discovery string
-	logLevel  string
-)
+var cfg *config.Config
 
-var (
-	runCmd = &cobra.Command{
-		Use:     "run [-c config]... [flags] [metric]...",
-		Aliases: []string{"start"},
-		Short:   "Run bridge to provide system metrics to the MQTT broker",
-		GroupID: "commands",
-		ValidArgs: []cobra.Completion{
-			cobra.CompletionWithDesc("all", "all metrics"),
-			"cpu", "memory", "disks", "net", "battery", "dirs", "gpu",
-		},
-		Args: cobra.OnlyValidArgs,
-		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			if err = printBanner(cmd); err != nil {
-				cmd.Println(err)
-				return
-			}
-
-			initConfig()
-			cfg, err = config.Load(cfgPath...)
-			if err != nil && !errors.Is(err, os.ErrNotExist) {
-				return
-			}
-			if err = flagsToConfig(cfg, cmd, args); err != nil {
-				return
-			}
-			log.Info("Config loaded")
-			setLogHandler(cfg, log.LevelDebug)
-			log.Debug("MQTT broker", "addr", cfg.MQTT.Broker)
-
+// RunCommand is the main [cobra.Command] used for running the bridge.
+var RunCommand = &cobra.Command{
+	Use:     "run [-c config]... [flags] [metric]...",
+	Aliases: []string{"start"},
+	Short:   "Run bridge to provide system metrics to the MQTT broker",
+	GroupID: "commands",
+	ValidArgs: []cobra.Completion{
+		cobra.CompletionWithDesc("all", "all metrics"),
+		"cpu", "memory", "disks", "net", "battery", "dirs", "gpu",
+	},
+	Args: cobra.OnlyValidArgs,
+	PreRunE: func(cmd *cobra.Command, args []string) (err error) {
+		if err = PrintBanner(cmd); err != nil {
+			cmd.Println(err)
 			return
-		},
-		RunE: runBridge,
+		}
 
-		DisableFlagsInUseLine: true,
-	}
-)
+		initConfig()
+		cfg, err = config.Load(ConfigPath...)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		if err = flagsToConfig(cfg, cmd, args); err != nil {
+			return
+		}
+		log.Info("Config loaded")
+		setLogHandler(cfg, log.LevelDebug)
+		log.Debug("MQTT broker", "addr", cfg.MQTT.Broker)
+		return
+	},
+	RunE: runBridge,
+
+	DisableFlagsInUseLine: true,
+}
 
 func init() {
-	runCmd.Flags().SortFlags = false
-	runCmd.Flags().StringSliceVarP(&cfgPath, "config", "c", nil, "Path(s) to config file/directory (default is first of $MQTTOP_CONFIG_FILE, $XDG_CONFIG_HOME/mqttop.yaml, $HOME/.config/mqttop.yaml)")
-	runCmd.Flags().StringVarP(&broker, "broker", "b", "", "MQTT broker address")
-	runCmd.Flags().IntVarP(&port, "port", "p", 1883, "MQTT broker port")
-	runCmd.Flags().StringVar(&username, "username", "", "MQTT client username")
-	runCmd.Flags().StringVar(&password, "password", "", "MQTT client password")
-	runCmd.Flags().DurationVarP(&interval, "interval", "i", 0, "Update interval")
-	runCmd.Flags().StringVarP(&discovery, "discovery", "d", "", "Discovery prefix, or 'disabled' to disable")
-	runCmd.Flags().StringVarP(&logLevel, "log", "l", "", "Log level")
+	RunCommand.Flags().SortFlags = false
+	RunCommand.Flags().StringSliceVarP(&ConfigPath, "config", "c", nil, "Path(s) to config file/directory (default is first of $MQTTOP_CONFIG_FILE, $XDG_CONFIG_HOME/mqttop.yaml, $HOME/.config/mqttop.yaml)")
+	RunCommand.Flags().StringVarP(&Broker, "broker", "b", "", "MQTT broker address")
+	RunCommand.Flags().IntVarP(&Port, "port", "p", 1883, "MQTT broker port")
+	RunCommand.Flags().StringVar(&Username, "username", "", "MQTT client username")
+	RunCommand.Flags().StringVar(&Password, "password", "", "MQTT client password")
+	RunCommand.Flags().DurationVarP(&Interval, "interval", "i", 0, "Update interval")
+	RunCommand.Flags().StringVarP(&Discovery, "discovery", "d", "", "Discovery prefix, or 'disabled' to disable")
+	RunCommand.Flags().StringVarP(&LogLevel, "log", "l", "", "Log level")
 
-	rootCmd.AddCommand(runCmd)
+	RootCommand.AddCommand(RunCommand)
 }
 
 func initConfig() {
 	const defaultConfigFile = "mqttop.yaml"
 
-	if len(cfgPath) > 0 {
+	if len(ConfigPath) > 0 {
 		return
 	}
 	cfgFile, ok := os.LookupEnv("MQTTOP_CONFIG_PATH")
 	if ok {
-		cfgPath = strings.Split(cfgFile, ",")
+		ConfigPath = strings.Split(cfgFile, ",")
 		return
 	}
 	if xdg, ok := os.LookupEnv("XDG_CONFIG_HOME"); ok {
-		cfgPath = []string{filepath.Join(xdg, defaultConfigFile)}
+		ConfigPath = []string{filepath.Join(xdg, defaultConfigFile)}
 		return
 	}
 	home, err := os.UserHomeDir()
 	cobra.CheckErr(err)
-	cfgPath = []string{filepath.Join(home, ".config", defaultConfigFile)}
+	ConfigPath = []string{filepath.Join(home, ".config", defaultConfigFile)}
 }
 
 func flagsToConfig(cfg *config.Config, cmd *cobra.Command, args []string) error {
-	if logLevel != "" {
+	if LogLevel != "" {
 		var level log.Level
-		if err := level.UnmarshalText([]byte(logLevel)); err != nil {
+		if err := level.UnmarshalText([]byte(LogLevel)); err != nil {
 			return err
 		}
 		cfg.Log.Level = level
 	}
-	if broker != "" {
+	if Broker != "" {
 		var hasPort bool
-		if last := broker[len(broker)-1]; '0' <= last && last <= '9' {
-			for _, c := range broker {
+		if last := Broker[len(Broker)-1]; '0' <= last && last <= '9' {
+			for _, c := range Broker {
 				switch {
 				case c == ':':
 					hasPort = true
@@ -129,24 +126,24 @@ func flagsToConfig(cfg *config.Config, cmd *cobra.Command, args []string) error 
 				}
 			}
 		}
-		if !hasPort && port >= 0 {
-			broker += ":" + strconv.Itoa(port)
+		if !hasPort && Port >= 0 {
+			Broker += ":" + strconv.Itoa(Port)
 		}
-		cfg.MQTT.Broker = broker
+		cfg.MQTT.Broker = Broker
 	}
-	if username != "" {
-		cfg.MQTT.Username = username
+	if Username != "" {
+		cfg.MQTT.Username = Username
 	}
-	if password != "" {
-		cfg.MQTT.Password = password
+	if Password != "" {
+		cfg.MQTT.Password = Password
 	}
-	if interval > 0 {
-		cfg.SetInterval(interval)
+	if Interval > 0 {
+		cfg.SetInterval(Interval)
 	}
-	if discovery == "disabled" {
+	if Discovery == "disabled" {
 		cfg.Discovery.Enabled = false
-	} else if discovery != "" {
-		cfg.Discovery.Prefix = discovery
+	} else if Discovery != "" {
+		cfg.Discovery.Prefix = Discovery
 	}
 	if len(args) > 0 {
 		cfg.SetMetrics(args...)
@@ -173,7 +170,7 @@ func setLogHandler(cfg *config.Config, minLevel log.Level) {
 			return
 		}
 		w = f
-		cleanup = append(cleanup, func() { f.Close() })
+		AddCleanup(func() { f.Close() })
 	}
 	if cfg.Log.Level < minLevel {
 		cfg.Log.Level = minLevel
@@ -193,14 +190,12 @@ func setLogHandler(cfg *config.Config, minLevel log.Level) {
 	return
 }
 
-func printBanner(cmd *cobra.Command) error {
+// PrintBanner prints the banner to the given commands output.
+func PrintBanner(cmd *cobra.Command) error {
 	t := template.New("banner")
-	template.Must(t.Parse(bannerTemplate()))
+	template.Must(t.Parse(BannerTemplate()))
 	w := cmd.OutOrStdout()
 	err := t.Execute(w, cmd.Root())
-	/*	if s, ok := w.(interface{ Sync() error }); ok {
-		s.Sync()
-	}*/
 	return err
 }
 
@@ -217,7 +212,7 @@ func runBridge(cmd *cobra.Command, _ []string) error {
 	bridge := mqttop.New(cfg)
 	if err := bridge.Connect(ctx); err != nil {
 		log.Error("Not connected.", err)
-		return &exitErr{err, 1}
+		return &ExitErr{err, 1}
 	}
 	defer func() {
 		cancel()
@@ -229,7 +224,8 @@ func runBridge(cmd *cobra.Command, _ []string) error {
 	select {
 	case <-bridge.Ready():
 		if cfg.Discovery.Enabled {
-			bridge.Discover(ctx)
+			discoveryPath := filepath.Join(filepath.Dir(ConfigPath[0]), "discovery.json")
+			bridge.Discover(ctx, discoveryPath)
 		}
 	case <-c:
 		return nil

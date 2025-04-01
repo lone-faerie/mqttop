@@ -10,6 +10,7 @@ import (
 	"github.com/lone-faerie/mqttop/log"
 )
 
+// Mount describes a mount according to /proc/1/mounts (or /proc/self/mounts)
 type Mount struct {
 	Dev    string
 	Mnt    string
@@ -156,6 +157,8 @@ func findMounts(search map[string]*Mount, valid map[string]bool, useFSTab bool) 
 	return nil
 }
 
+// MountInfo returns the disks mounted on the system, mapped by their mounting point.
+// If useFSTab is true, the disk must be in /etc/fstab to be included.
 func MountInfo(useFSTab bool) (map[string]*Mount, error) {
 	valid, err := validFSTypes()
 	if err != nil {
