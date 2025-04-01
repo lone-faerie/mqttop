@@ -83,6 +83,8 @@ func newDir(dcfg *config.DirConfig, cfg *config.Config) (*Dir, error) {
 	}
 	if dcfg.Topic != "" {
 		d.topic = dcfg.Topic
+	} else if cfg.TopicPrefix != "" {
+		d.topic = cfg.TopicPrefix + "/metric/dir/" + d.Slug()
 	} else {
 		d.topic = "mqttop/metric/dir/" + d.Slug()
 	}

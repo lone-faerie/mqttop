@@ -66,6 +66,8 @@ func NewMemory(cfg *config.Config) (*Memory, error) {
 
 	if cfg.Memory.Topic != "" {
 		m.topic = cfg.Memory.Topic
+	} else if cfg.TopicPrefix != "" {
+		m.topic = cfg.TopicPrefix + "/metric/memory"
 	} else {
 		m.topic = "mqttop/metric/memory"
 	}

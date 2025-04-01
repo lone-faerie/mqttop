@@ -15,9 +15,9 @@ import (
 
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
+	"github.com/lone-faerie/mqttop/log"
 	"github.com/lone-faerie/mqttop/procfs"
 	"github.com/lone-faerie/mqttop/sysfs"
-	"github.com/lone-faerie/mqttop/log"
 )
 
 type cpuTemp struct {
@@ -126,6 +126,8 @@ func NewCPU(cfg *config.Config) (*CPU, error) {
 
 	if cfg.CPU.Topic != "" {
 		c.topic = cfg.CPU.Topic
+	} else if cfg.TopicPrefix != "" {
+		c.topic = cfg.TopicPrefix + "/metric/cpu"
 	} else {
 		c.topic = "mqttop/metric/cpu"
 	}

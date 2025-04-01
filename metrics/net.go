@@ -14,8 +14,8 @@ import (
 
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
-	"github.com/lone-faerie/mqttop/sysfs"
 	"github.com/lone-faerie/mqttop/log"
+	"github.com/lone-faerie/mqttop/sysfs"
 )
 
 // NetInterface holds the data for each network interface monitored
@@ -75,6 +75,8 @@ func NewNet(cfg *config.Config) (*Net, error) {
 	}
 	if cfg.Net.Topic != "" {
 		n.topic = cfg.Net.Topic
+	} else if cfg.TopicPrefix != "" {
+		n.topic = cfg.TopicPrefix + "/metric/net"
 	} else {
 		n.topic = "mqttop/metric/net"
 	}

@@ -23,13 +23,28 @@ var ListCommand = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"l"},
 	Short:   "List available metrics",
-	RunE:    listMetrics,
+	Long: `List available metrics.
+
+If --config is specified, the config will be used to determine which metrics to include.
+
+If --summary is specified, the list will be a comma-seperated list of metric types. Otherwise, the metrics will be printed with some basic information, i.e. CPU name, total memory, etc.`,
+	ValidArgs: []cobra.Completion{
+		cobra.CompletionWithDesc("all", "all metrics"),
+		"cpu", "memory", "disks", "net", "battery", "dirs", "gpu",
+	},
+	Args: cobra.OnlyValidArgs,
+	RunE: listMetrics,
 }
 
 func init() {
 	ListCommand.Flags().SortFlags = false
 	ListCommand.Flags().StringSliceVarP(&ConfigPath, "config", "c", nil, "Path(s) to config file/directory")
 	ListCommand.Flags().BoolVarP(&ListSummary, "summary", "s", false, "Display a summary of available metrics")
+
+	ListCommand.MarkFlagFilename("config", "yaml", "yml")
+	ListCommand.MarkFlagDirname("config")
+
+	ListCommand.SetHelpTemplate(ListCommand.HelpTemplate() + "\n" + fullDocsFooter + "\n")
 
 	RootCommand.AddCommand(ListCommand)
 }

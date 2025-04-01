@@ -10,8 +10,8 @@ import (
 
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
-	"github.com/lone-faerie/mqttop/sysfs"
 	"github.com/lone-faerie/mqttop/log"
+	"github.com/lone-faerie/mqttop/sysfs"
 )
 
 type batteryUpdates struct {
@@ -116,8 +116,10 @@ func NewBattery(cfg *config.Config) (*Battery, error) {
 	}
 	if cfg.Battery.Topic != "" {
 		b.topic = cfg.Battery.Topic
+	} else if cfg.TopicPrefix != "" {
+		b.topic = cfg.TopicPrefix + "/metric/battery"
 	} else {
-		b.topic = "mqtt/metric/battery"
+		b.topic = "mqttop/metric/battery"
 	}
 	return b, nil
 }

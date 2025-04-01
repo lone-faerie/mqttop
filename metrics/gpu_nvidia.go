@@ -13,8 +13,8 @@ import (
 
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/internal/byteutil"
-	"github.com/lone-faerie/mqttop/sysfs"
 	"github.com/lone-faerie/mqttop/log"
+	"github.com/lone-faerie/mqttop/sysfs"
 )
 
 type gpuFlag uint32
@@ -112,6 +112,8 @@ func NewNvidiaGPU(cfg *config.Config) (*NvidiaGPU, error) {
 	}
 	if cfg.GPU.Topic != "" {
 		g.topic = cfg.GPU.Topic
+	} else if cfg.TopicPrefix != "" {
+		g.topic = cfg.TopicPrefix + "/metric/gpu"
 	} else {
 		g.topic = "mqttop/metric/gpu"
 	}

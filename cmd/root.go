@@ -12,8 +12,12 @@ var cleanup []func()
 
 // RootCommand is the root [cobra.Command] of the program.
 var RootCommand = &cobra.Command{
-	Use:     "mqttop [-c config]...",
-	Short:   "Provide system metrics over MQTT",
+	Use:   "mqttop",
+	Short: "A bridge to provide system metrics over MQTT.",
+	Long: `A bridge to provide system metrics over MQTT.
+
+Full documentation is available at:
+https://pkg.go.dev/github.com/lone-faerie/mqttop`,
 	Version: build.Version(),
 	PersistentPostRun: func(_ *cobra.Command, _ []string) {
 		for _, f := range cleanup {
@@ -28,6 +32,7 @@ var RootCommand = &cobra.Command{
 func init() {
 	cobra.EnableCommandSorting = false
 	RootCommand.SetVersionTemplate(BannerTemplate())
+	RootCommand.SetHelpTemplate(RootCommand.HelpTemplate() + "\n" + fullDocsFooter + "\n")
 	RootCommand.AddGroup(
 		&cobra.Group{"commands", "Commands:"},
 	)
@@ -60,6 +65,9 @@ const banner = `┌────────────────────�
 func BannerTemplate() string {
 	return fmt.Sprintf(banner, build.BuildTime())
 }
+
+const fullDocsFooter = `Full documentation is available at:
+https://pkg.go.dev/github.com/lone-faerie/mqttop`
 
 // ExitErr is an error that should cause the program to exit with the given code.
 type ExitErr struct {

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,7 +19,6 @@ import (
 
 	"github.com/lone-faerie/mqttop"
 	"github.com/lone-faerie/mqttop/config"
-	//	"github.com/lone-faerie/mqttop/internal/build"
 	"github.com/lone-faerie/mqttop/log"
 )
 
@@ -31,15 +32,36 @@ var (
 	Interval   time.Duration // Update interval
 	Discovery  string        // Discovery prefix, or 'disabled' to disable
 	LogLevel   string        // Log level
+	Detach     bool          // Run detached (in background)
 )
 
 var cfg *config.Config
 
 // RunCommand is the main [cobra.Command] used for running the bridge.
 var RunCommand = &cobra.Command{
-	Use:     "run [-c config]... [flags] [metric]...",
+	Use:     "run [--config <path>]... [flags] [metric]...",
 	Aliases: []string{"start"},
-	Short:   "Run bridge to provide system metrics to the MQTT broker",
+	Short:   "Run the metrics bridge",
+	Long: `Run a bridge to provide system metrics to the MQTT broker.
+
+A connection to the MQTT broker will be established and the bridge will run in the foreground until a signal is received.
+
+	- SIGINT or SIGTERM will gracefully shutdown the bridge.
+
+MQTTop can load configuration from multiple YAML files, including from directories. If no config file is specified, the default path(s) will be determined by the first defined value of $MQTTOP_CONFIG_PATH, $XDG_CONFIG_HOME/mqttop.yaml, or $HOME/.config/mqttop.yaml. In the case of $MQTTOP_CONFIG_PATH, the value may be a comma-separated list of paths. If none of these files exist, the default configuration will be used, which looks for the following environment variables:
+
+	- broker:   $MQTTOP_BROKER_ADDRESS
+	- username: $MQTTOP_BROKER_USERNAME
+	- password: $MQTTOP_BROKER_PASSWORD
+
+Enabled metrics may be supplied as arguments, which will ignore the enabled metrics of the config. The special argument 'all' may be supplied to enable all metrics. The valid arguments include:
+
+	- all, cpu, memory, disks, net, battery, dirs, gpu
+
+All of the flags, if specified, will override the equivalent values in the config. The format of --broker should be scheme://host:port Where "scheme" is one of "tcp", "ssl", or "ws", "host" is the ip-address (or hostname) and "port" is the port on which the broker is accepting connections. If "scheme" is not defined, it defaults to "tcp" and if "port" is not defined, it will use the value of --port (default 1883).`,
+	Example: `  mqttop run --config config.yaml
+  mqttop run --config config.yaml cpu memory
+  mqttop run --broker 127.0.0.1:1883 --username mqttop --password p@55w0rd`,
 	GroupID: "commands",
 	ValidArgs: []cobra.Completion{
 		cobra.CompletionWithDesc("all", "all metrics"),
@@ -47,6 +69,17 @@ var RunCommand = &cobra.Command{
 	},
 	Args: cobra.OnlyValidArgs,
 	PreRunE: func(cmd *cobra.Command, args []string) (err error) {
+		if p, _ := cmd.Flags().GetString("pingback"); p != "" {
+			log.Info("Pingback", "val", p)
+		}
+		if Detach {
+			var code int
+			if err = runDetached(cmd, args); err != nil {
+				code = 1
+			}
+			return &ExitErr{err, code}
+		}
+
 		if err = PrintBanner(cmd); err != nil {
 			cmd.Println(err)
 			return
@@ -72,14 +105,22 @@ var RunCommand = &cobra.Command{
 
 func init() {
 	RunCommand.Flags().SortFlags = false
-	RunCommand.Flags().StringSliceVarP(&ConfigPath, "config", "c", nil, "Path(s) to config file/directory (default is first of $MQTTOP_CONFIG_FILE, $XDG_CONFIG_HOME/mqttop.yaml, $HOME/.config/mqttop.yaml)")
+	RunCommand.Flags().StringSliceVarP(&ConfigPath, "config", "c", nil, "Path(s) to config file/directory")
 	RunCommand.Flags().StringVarP(&Broker, "broker", "b", "", "MQTT broker address")
 	RunCommand.Flags().IntVarP(&Port, "port", "p", 1883, "MQTT broker port")
 	RunCommand.Flags().StringVar(&Username, "username", "", "MQTT client username")
 	RunCommand.Flags().StringVar(&Password, "password", "", "MQTT client password")
 	RunCommand.Flags().DurationVarP(&Interval, "interval", "i", 0, "Update interval")
-	RunCommand.Flags().StringVarP(&Discovery, "discovery", "d", "", "Discovery prefix, or 'disabled' to disable")
+	RunCommand.Flags().StringVarP(&Discovery, "discovery", "D", "", "Discovery prefix, or 'disabled' to disable")
 	RunCommand.Flags().StringVarP(&LogLevel, "log", "l", "", "Log level")
+	RunCommand.Flags().BoolVarP(&Detach, "detach", "d", false, "Run detached (in background)")
+	RunCommand.Flags().String("pingback", "", "Pingback (hidden)")
+	RunCommand.Flags().Lookup("pingback").Hidden = true
+
+	RunCommand.MarkFlagFilename("config", "yaml", "yml")
+	RunCommand.MarkFlagDirname("config")
+
+	RunCommand.SetHelpTemplate(RunCommand.HelpTemplate() + "\n" + fullDocsFooter + "\n")
 
 	RootCommand.AddCommand(RunCommand)
 }
@@ -199,7 +240,20 @@ func PrintBanner(cmd *cobra.Command) error {
 	return err
 }
 
-func runBridge(cmd *cobra.Command, _ []string) error {
+func runDetached(cmd *cobra.Command, args []string) error {
+	c := exec.Command(os.Args[0], os.Args[1:]...)
+	if errors.Is(c.Err, exec.ErrDot) {
+		c.Err = nil
+	}
+	c.Args = slices.DeleteFunc(c.Args, func(s string) bool { return s == "-d" || s == "--detach" })
+	return c.Start()
+}
+
+func runBridge(cmd *cobra.Command, args []string) error {
+	if Detach {
+		return runDetached(cmd, args)
+	}
+
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 
@@ -232,7 +286,10 @@ func runBridge(cmd *cobra.Command, _ []string) error {
 	}
 	cfg = nil
 
-	<-c
-	log.Debug("Received signal")
+	select {
+	case <-bridge.Done():
+	case <-c:
+		log.Debug("Received signal")
+	}
 	return nil
 }

@@ -47,6 +47,7 @@ var errNoMetrics = errors.New("no metrics")
 type Bridge struct {
 	client mqtt.Client
 
+	topicPrefix  string
 	discoveryCfg *config.DiscoveryConfig
 	m            []metrics.Metric
 	states       stateMap
@@ -58,6 +59,7 @@ type Bridge struct {
 	wg     sync.WaitGroup
 	mu     sync.Mutex
 	ready  chan struct{}
+	done   chan struct{}
 }
 
 // New returns a new Bridge with the provided config and a [mqtt.Client] derived from the config.
@@ -93,8 +95,18 @@ func NewWithClient(cfg *config.Config, c mqtt.Client) *Bridge {
 	return &Bridge{
 		client:       c,
 		m:            metrics.New(cfg),
+		topicPrefix:  cfg.TopicPrefix,
 		discoveryCfg: &cfg.Discovery,
 	}
+}
+
+func waitToken(ctx context.Context, t mqtt.Token) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-t.Done():
+	}
+	return t.Error()
 }
 
 func (b *Bridge) handleMetric(i int, m metrics.Metric) mqtt.MessageHandler {
@@ -130,12 +142,7 @@ func (b *Bridge) publishBirthOrWill(ctx context.Context, isBirth bool) (err erro
 		data = opts.WillPayload()
 	}
 	t := b.client.Publish(opts.WillTopic(), opts.WillQos(), opts.WillRetained(), data)
-	select {
-	case <-ctx.Done():
-		return
-	case <-t.Done():
-	}
-	return t.Error()
+	return waitToken(ctx, t)
 }
 
 func (b *Bridge) publishUpdates(ctx context.Context) {
@@ -176,7 +183,7 @@ func (b *Bridge) Start(ctx context.Context) {
 	})
 }
 
-func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) (done bool) {
+func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 	if m.Topic() == "" {
 		return
 	}
@@ -187,12 +194,7 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) (done
 	}
 	b.states.Set(m.Topic(), true)
 	t := b.client.SubscribeMultiple(metricTopics(m), b.handleMetric(i, m))
-	select {
-	case <-ctx.Done():
-		return true
-	case <-t.Done():
-	}
-	if err := t.Error(); err != nil {
+	if err := waitToken(ctx, t); err != nil {
 		log.Error("Error subscribing to "+m.Topic(), err)
 		return
 	}
@@ -217,33 +219,52 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) (done
 		}
 		log.Info(metric.Type() + " done")
 	}(i, m)
-	return
 }
 
 // start starts listening to the metrics.
 func (b *Bridge) start(ctx context.Context) {
 	b.ready = make(chan struct{})
+	b.done = make(chan struct{})
 	b.updates = make(chan metrics.Metric)
 	b.states.m = make(map[string]bool, len(b.m))
 	ctx, b.cancel = context.WithCancel(ctx)
 	go func() {
 		defer close(b.ready)
 		for i, m := range b.m {
-			if b.startMetric(ctx, i, m) {
-				break
+			b.startMetric(ctx, i, m)
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
 		}
 		if err := b.publishBirthOrWill(ctx, true); err != nil {
 			log.Error("Unable to publish birth message", err)
 		}
 		go b.publishUpdates(ctx)
+		if b.topicPrefix == "" {
+			b.topicPrefix = "mqttop"
+		}
+		t := b.client.Subscribe(b.topicPrefix+"/bridge/stop", 0, func(_ mqtt.Client, msg mqtt.Message) {
+			msg.Ack()
+			b.Disconnect()
+		})
+		if err := waitToken(ctx, t); err != nil {
+			log.Error("Unable to subscribe to stop topic", err)
+		}
 	}()
+
 	return
 }
 
 // Ready returns a channel that can be used to wait until all metrics have been started.
 func (b *Bridge) Ready() <-chan struct{} {
 	return b.ready
+}
+
+// Done returns a channel that can be used to wait until the bridge has disconnected.
+func (b *Bridge) Done() <-chan struct{} {
+	return b.done
 }
 
 // Connect will create a connection to the message broker with the provided context, by default
@@ -254,16 +275,14 @@ func (b *Bridge) Connect(ctx context.Context) error {
 		return errNoMetrics
 	}
 	t := b.client.Connect()
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-t.Done():
-	}
-	return t.Error()
+	return waitToken(ctx, t)
 }
 
 // Disconnect will end the connection with the server.
 func (b *Bridge) Disconnect() {
+	if !b.client.IsConnected() {
+		return
+	}
 	if err := b.publishBirthOrWill(nil, false); err != nil {
 		log.Warn("Unable to publish LWT on graceful disconnect", err)
 	}
@@ -275,7 +294,8 @@ func (b *Bridge) Disconnect() {
 	b.wg.Wait()
 	close(b.updates)
 	time.Sleep(time.Second)
-	log.Debug("Disconnected")
+	log.Info("Disconnected")
+	close(b.done)
 }
 
 // Discover publishes the discovery payload(s) for Home Assistant MQTT discovery after

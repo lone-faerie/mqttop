@@ -26,13 +26,22 @@ all: clean build ## Build binary
 
 clean: ## Clean output directory
 	go clean
-	rm ${BIN_OUT_DIR}/*
+	rm -f ${BIN_OUT_DIR}/*
 
 build: ## Build binary
 	go build ${GO_BUILD_FLAGS} -o ${BIN_PATH} ./cmd
 
 install: clean build ## Build and install binary
-	cp ${BIN_PATH} /usr/local/bin/mqttop
+	sudo cp ${BIN_PATH} /usr/local/bin/mqttop
+	@if [ -x /bin/bash ]; then\
+		sudo mqttop completion bash > /etc/bash_completion.d/mqttop;\
+	fi
+	@if [ -x /bin/zsh ]; then\
+		sudo mqttop completion zsh > "${fpath[1]}/_mqttop";\
+	fi
+	@if [ -x /bin/fish ]; then\
+		sudo mqttop completion fish > ~/.config/fish/completions/mqttop.fish;\
+	fi
 
 debug: ## Build binary with 'debug' tag
 	go build -tags $(subst $(space),$(comma),$(strip $(GO_BUILD_TAGS) debug)) -ldflags="${LDFLAGS}" -o ${BIN_PATH} ./cmd

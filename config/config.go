@@ -21,31 +21,33 @@ import (
 // Config should be created with a call to [Default], [Read], or [Load] as
 // some options require further configuration than simply setting.
 type Config struct {
-	Interval  time.Duration   `yaml:"interval"`
-	MQTT      MQTTConfig      `yaml:"mqtt,omitempty"`
-	Discovery DiscoveryConfig `yaml:"discovery,omitempty"`
-	Log       LogConfig       `yaml:"log,omitempty"`
-	CPU       CPUConfig       `yaml:"cpu,omitempty"`
-	Memory    MemoryConfig    `yaml:"memory,omitempty"`
-	Disks     DisksConfig     `yaml:"disks,omitempty"`
-	Net       NetConfig       `yaml:"net,omitempty"`
-	Battery   BatteryConfig   `yaml:"battery,omitempty"`
-	Dirs      []DirConfig     `yaml:"dirs,omitempty"`
-	GPU       GPUConfig       `yaml:"gpu,omitempty"`
+	Interval    time.Duration   `yaml:"interval"`
+	TopicPrefix string          `yaml:"topic_prefix"`
+	MQTT        MQTTConfig      `yaml:"mqtt,omitempty"`
+	Discovery   DiscoveryConfig `yaml:"discovery,omitempty"`
+	Log         LogConfig       `yaml:"log,omitempty"`
+	CPU         CPUConfig       `yaml:"cpu,omitempty"`
+	Memory      MemoryConfig    `yaml:"memory,omitempty"`
+	Disks       DisksConfig     `yaml:"disks,omitempty"`
+	Net         NetConfig       `yaml:"net,omitempty"`
+	Battery     BatteryConfig   `yaml:"battery,omitempty"`
+	Dirs        []DirConfig     `yaml:"dirs,omitempty"`
+	GPU         GPUConfig       `yaml:"gpu,omitempty"`
 
 	FormatSize func(v int, bits bool) string `yaml:"-"`
 }
 
 var defaultCfg = &Config{
-	Interval:  2 * time.Second,
-	MQTT:      defaultMQTT,
-	Discovery: defaultDiscovery,
-	CPU:       defaultCPU,
-	Memory:    defaultMemory,
-	Disks:     defaultDisks,
-	Net:       defaultNet,
-	Battery:   defaultBattery,
-	GPU:       defaultGPU,
+	Interval:    2 * time.Second,
+	TopicPrefix: "mqttop",
+	MQTT:        defaultMQTT,
+	Discovery:   defaultDiscovery,
+	CPU:         defaultCPU,
+	Memory:      defaultMemory,
+	Disks:       defaultDisks,
+	Net:         defaultNet,
+	Battery:     defaultBattery,
+	GPU:         defaultGPU,
 }
 
 // Default returns the default Config when no config file is provided.
@@ -87,26 +89,61 @@ func (cfg *Config) loadValue(v reflect.Value) error {
 }
 
 func (cfg *Config) load() (err error) {
+	log.Debug("Topic Prefix", "prefix", cfg.TopicPrefix)
+	if cfg.TopicPrefix != "mqttop" {
+		log.Debug("Replacing topic prefix", "old", "mqttop", "new", cfg.TopicPrefix)
+		if s, ok := strings.CutPrefix(cfg.MQTT.BirthWillTopic, "mqttop/"); ok {
+			log.Debug("Replacing prefix of birth_lwt_topic", "prefix", cfg.TopicPrefix)
+			cfg.MQTT.BirthWillTopic = cfg.TopicPrefix + "/" + s
+		}
+		if s, ok := strings.CutPrefix(cfg.Discovery.Availability, "mqttop/"); ok {
+			cfg.Discovery.Availability = cfg.TopicPrefix + "/" + s
+		}
+	}
 	var (
 		v = reflect.ValueOf(cfg).Elem()
 		n = v.NumField()
 	)
-	expandValue(v)
+	//	expandValue(v)
 	for i := 0; i < n; i++ {
-		f := v.Field(i)
-		if f.Kind() != reflect.Slice {
-			if err = cfg.loadValue(f); err != nil {
-				return
-			}
-			continue
-		}
-		for j := 0; j < f.Len(); j++ {
-			if err = cfg.loadValue(f.Index(j)); err != nil {
-				return
-			}
-		}
+		cfg.forValue(v.Field(i), "")
 	}
 	return
+}
+
+var topicFields = []string{
+	"BirthWillTopic", "Availability", "Topic",
+}
+
+func (cfg *Config) forValue(v reflect.Value, field string) {
+	switch v.Kind() {
+	case reflect.String:
+		s := Expand(v.String())
+		if cfg.TopicPrefix != "mqttop" && slices.Contains(topicFields, field) {
+			if topic, ok := strings.CutPrefix(s, "mqttop/"); ok {
+				s = cfg.TopicPrefix + "/" + topic
+			}
+		}
+		v.SetString(s)
+	case reflect.Struct:
+		iface := v.Addr().Interface()
+		if l, ok := iface.(loader); ok {
+			l.load(cfg)
+		}
+		t := v.Type()
+		n := v.NumField()
+		for i := 0; i < n; i++ {
+			f := t.Field(i)
+			cfg.forValue(v.FieldByIndex(f.Index), f.Name)
+		}
+	case reflect.Slice, reflect.Array:
+		n := v.Len()
+		for i := 0; i < n; i++ {
+			cfg.forValue(v.Index(i), "")
+		}
+	case reflect.Pointer:
+		cfg.forValue(v.Elem(), "")
+	}
 }
 
 func expandValue(v reflect.Value) {
@@ -127,6 +164,30 @@ func expandValue(v reflect.Value) {
 
 	case reflect.Pointer:
 		expandValue(v.Elem())
+	}
+}
+
+func replacePrefix(v reflect.Value, prefix string) {
+	switch v.Kind() {
+	case reflect.Struct:
+		f := v.FieldByName("Topic")
+		if f.IsValid() && f.Kind() == reflect.String {
+			if s, ok := strings.CutPrefix(f.String(), "mqttop/"); ok {
+				f.SetString(prefix + "/" + s)
+			}
+			return
+		}
+		n := v.NumField()
+		for i := 0; i < n; i++ {
+			replacePrefix(v.Field(i), prefix)
+		}
+	case reflect.Slice, reflect.Array:
+		n := v.Len()
+		for i := 0; i < n; i++ {
+			replacePrefix(v.Index(i), prefix)
+		}
+	case reflect.Pointer:
+		replacePrefix(v.Elem(), prefix)
 	}
 }
 

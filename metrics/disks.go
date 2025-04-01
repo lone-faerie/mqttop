@@ -89,6 +89,8 @@ func NewDisks(cfg *config.Config) (*Disks, error) {
 	}
 	if cfg.Disks.Topic != "" {
 		d.topic = cfg.Disks.Topic
+	} else if cfg.TopicPrefix != "" {
+		d.topic = cfg.TopicPrefix + "/metric/disks"
 	} else {
 		d.topic = "mqttop/metric/disks"
 	}
