@@ -37,33 +37,35 @@ type Config struct {
 	FormatSize func(v int, bits bool) string `yaml:"-"`
 }
 
-var defaultCfg = &Config{
-	Interval:    2 * time.Second,
-	TopicPrefix: "mqttop",
-	MQTT:        defaultMQTT,
-	Discovery:   defaultDiscovery,
-	CPU:         defaultCPU,
-	Memory:      defaultMemory,
-	Disks:       defaultDisks,
-	Net:         defaultNet,
-	Battery:     defaultBattery,
-	GPU:         defaultGPU,
+func defaultCfg() *Config {
+	return &Config{
+		Interval:    2 * time.Second,
+		TopicPrefix: "mqttop",
+		MQTT:        defaultMQTT,
+		Discovery:   defaultDiscovery,
+		CPU:         defaultCPU,
+		Memory:      defaultMemory,
+		Disks:       defaultDisks,
+		Net:         defaultNet,
+		Battery:     defaultBattery,
+		GPU:         defaultGPU,
+	}
 }
 
 // Default returns the default Config when no config file is provided.
 func Default() *Config {
-	cfg := defaultCfg
-	cfg.load()
+	cfg := defaultCfg()
+	cfg.init()
 	return cfg
 }
 
 // Read returns the Config parsed from the yaml encoded config from r.
 func Read(r io.Reader) (cfg *Config, err error) {
-	cfg = defaultCfg
+	cfg = defaultCfg()
 	if err = yaml.NewDecoder(r).Decode(cfg); err != nil {
 		return
 	}
-	err = cfg.load()
+	err = cfg.init()
 	return
 }
 
@@ -73,27 +75,18 @@ func Read(r io.Reader) (cfg *Config, err error) {
 func Load(file ...string) (cfg *Config, err error) {
 	log.Info("Loading config", "path", file)
 	if _, err = os.Stat(file[0]); err != nil {
-		return defaultCfg, nil
+		return Default(), nil
 	}
 	r := byteutil.NewMultiFileReader(file...)
 	defer r.Close()
 	return Read(r)
 }
 
-func (cfg *Config) loadValue(v reflect.Value) error {
-	iface := v.Addr().Interface()
-	if l, ok := iface.(loader); ok {
-		return l.load(cfg)
-	}
-	return nil
-}
-
-func (cfg *Config) load() (err error) {
-	log.Debug("Topic Prefix", "prefix", cfg.TopicPrefix)
+func (cfg *Config) init() (err error) {
+	cfg.TopicPrefix = strings.TrimRight(cfg.TopicPrefix, "/")
 	if cfg.TopicPrefix != "mqttop" {
 		log.Debug("Replacing topic prefix", "old", "mqttop", "new", cfg.TopicPrefix)
 		if s, ok := strings.CutPrefix(cfg.MQTT.BirthWillTopic, "mqttop/"); ok {
-			log.Debug("Replacing prefix of birth_lwt_topic", "prefix", cfg.TopicPrefix)
 			cfg.MQTT.BirthWillTopic = cfg.TopicPrefix + "/" + s
 		}
 		if s, ok := strings.CutPrefix(cfg.Discovery.Availability, "mqttop/"); ok {
@@ -146,51 +139,6 @@ func (cfg *Config) forValue(v reflect.Value, field string) {
 	}
 }
 
-func expandValue(v reflect.Value) {
-	switch v.Kind() {
-	case reflect.String:
-		s := Expand(v.String())
-		v.SetString(s)
-	case reflect.Struct:
-		n := v.NumField()
-		for i := 0; i < n; i++ {
-			expandValue(v.Field(i))
-		}
-	case reflect.Slice, reflect.Array:
-		n := v.Len()
-		for i := 0; i < n; i++ {
-			expandValue(v.Index(i))
-		}
-
-	case reflect.Pointer:
-		expandValue(v.Elem())
-	}
-}
-
-func replacePrefix(v reflect.Value, prefix string) {
-	switch v.Kind() {
-	case reflect.Struct:
-		f := v.FieldByName("Topic")
-		if f.IsValid() && f.Kind() == reflect.String {
-			if s, ok := strings.CutPrefix(f.String(), "mqttop/"); ok {
-				f.SetString(prefix + "/" + s)
-			}
-			return
-		}
-		n := v.NumField()
-		for i := 0; i < n; i++ {
-			replacePrefix(v.Field(i), prefix)
-		}
-	case reflect.Slice, reflect.Array:
-		n := v.Len()
-		for i := 0; i < n; i++ {
-			replacePrefix(v.Index(i), prefix)
-		}
-	case reflect.Pointer:
-		replacePrefix(v.Elem(), prefix)
-	}
-}
-
 // Expand replaces ${var} or $var in s according to the values of
 // the current environment variables, and replaces !secret var according
 // to the file at /run/secret/<var>.
@@ -199,12 +147,6 @@ func Expand(s string) string {
 		return secrets.MustRead(secret, "")
 	}
 	return os.ExpandEnv(s)
-}
-
-// Expand calls [Expand] on every string field of cfg.
-func (cfg *Config) Expand() {
-	v := reflect.ValueOf(cfg).Elem()
-	expandValue(v)
 }
 
 // Write writes the yaml encoding of cfg to w.

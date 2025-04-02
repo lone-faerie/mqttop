@@ -29,6 +29,8 @@ var (
 	Port       int           // MQTT broker port
 	Username   string        // MQTT broker username
 	Password   string        // MQTT broker password
+	CertFile   string        // MQTT TLS certificate file (PEM encoded)
+	KeyFile    string        // MQTT TLS private key file (PEM encoded)
 	Interval   time.Duration // Update interval
 	Discovery  string        // Discovery prefix, or 'disabled' to disable
 	LogLevel   string        // Log level
@@ -77,7 +79,7 @@ All of the flags, if specified, will override the equivalent values in the confi
 			if err = runDetached(cmd, args); err != nil {
 				code = 1
 			}
-			return &ExitErr{err, code}
+			return &ExitError{err, code}
 		}
 
 		if err = PrintBanner(cmd); err != nil {
@@ -110,6 +112,8 @@ func init() {
 	RunCommand.Flags().IntVarP(&Port, "port", "p", 1883, "MQTT broker port")
 	RunCommand.Flags().StringVar(&Username, "username", "", "MQTT client username")
 	RunCommand.Flags().StringVar(&Password, "password", "", "MQTT client password")
+	RunCommand.Flags().StringVar(&CertFile, "cert", "", "MQTT TLS certificate file (PEM encoded)")
+	RunCommand.Flags().StringVar(&KeyFile, "key", "", "MQTT TLS private key file (PEM encoded)")
 	RunCommand.Flags().DurationVarP(&Interval, "interval", "i", 0, "Update interval")
 	RunCommand.Flags().StringVarP(&Discovery, "discovery", "D", "", "Discovery prefix, or 'disabled' to disable")
 	RunCommand.Flags().StringVarP(&LogLevel, "log", "l", "", "Log level")
@@ -177,6 +181,12 @@ func flagsToConfig(cfg *config.Config, cmd *cobra.Command, args []string) error 
 	}
 	if Password != "" {
 		cfg.MQTT.Password = Password
+	}
+	if CertFile != "" {
+		cfg.MQTT.CertFile = CertFile
+	}
+	if KeyFile != "" {
+		cfg.MQTT.KeyFile = KeyFile
 	}
 	if Interval > 0 {
 		cfg.SetInterval(Interval)
@@ -266,7 +276,7 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	bridge := mqttop.New(cfg)
 	if err := bridge.Connect(ctx); err != nil {
 		log.Error("Not connected.", err)
-		return &ExitErr{err, 1}
+		return &ExitError{err, 1}
 	}
 	defer func() {
 		cancel()
@@ -276,7 +286,10 @@ func runBridge(cmd *cobra.Command, args []string) error {
 
 	bridge.Start(ctx)
 	select {
-	case <-bridge.Ready():
+	case err := <-bridge.Ready():
+		if err != nil {
+			return &ExitError{err, 1}
+		}
 		if cfg.Discovery.Enabled {
 			discoveryPath := filepath.Join(filepath.Dir(ConfigPath[0]), "discovery.json")
 			bridge.Discover(ctx, discoveryPath)

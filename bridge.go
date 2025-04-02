@@ -21,10 +21,25 @@ type stateMap struct {
 	mu sync.Mutex
 }
 
-func (m *stateMap) Set(key string, state bool) {
+func (m *stateMap) Load(key string) (state, ok bool) {
+	m.mu.Lock()
+	state, ok = m.m[key]
+	m.mu.Unlock()
+	return
+}
+
+func (m *stateMap) Store(key string, state bool) {
 	m.mu.Lock()
 	m.m[key] = state
 	m.mu.Unlock()
+}
+
+func (m *stateMap) Swap(key string, state bool) (old, ok bool) {
+	m.mu.Lock()
+	old, ok = m.m[key]
+	m.m[key] = state
+	m.mu.Unlock()
+	return
 }
 
 func (m *stateMap) Delete(key string) {
@@ -58,7 +73,7 @@ type Bridge struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	mu     sync.Mutex
-	ready  chan struct{}
+	ready  chan error
 	done   chan struct{}
 }
 
@@ -115,6 +130,10 @@ func (b *Bridge) handleMetric(i int, m metrics.Metric) mqtt.MessageHandler {
 		switch {
 		case strings.HasSuffix(msg.Topic(), "update"):
 			go func() {
+				payload := string(msg.Payload())
+				if d, err := time.ParseDuration(payload); err == nil {
+					m.SetInterval(d)
+				}
 				if err := m.Update(); err == nil {
 					b.updates <- m
 				}
@@ -125,7 +144,15 @@ func (b *Bridge) handleMetric(i int, m metrics.Metric) mqtt.MessageHandler {
 	}
 }
 
-func (b *Bridge) publishBirthOrWill(ctx context.Context, isBirth bool) (err error) {
+func (b *Bridge) updateStatus(ctx context.Context, key string, state bool) error {
+	old, ok := b.states.Swap(key, state)
+	if ok && old == state {
+		return nil
+	}
+	return b.publishStatus(ctx, false)
+}
+
+func (b *Bridge) publishStatus(ctx context.Context, lwt bool) (err error) {
 	var (
 		data []byte
 		opts = b.client.OptionsReader()
@@ -133,13 +160,13 @@ func (b *Bridge) publishBirthOrWill(ctx context.Context, isBirth bool) (err erro
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if isBirth {
+	if lwt {
+		data = opts.WillPayload()
+	} else {
 		data, err = json.Marshal(&b.states)
 		if err != nil {
 			return
 		}
-	} else {
-		data = opts.WillPayload()
 	}
 	t := b.client.Publish(opts.WillTopic(), opts.WillQos(), opts.WillRetained(), data)
 	return waitToken(ctx, t)
@@ -179,7 +206,12 @@ func (b *Bridge) Start(ctx context.Context) {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		b.start(ctx)
+		b.ready = make(chan error)
+		b.done = make(chan struct{})
+		b.updates = make(chan metrics.Metric)
+		b.states.m = make(map[string]bool, len(b.m))
+		ctx, b.cancel = context.WithCancel(ctx)
+		go b.start(ctx)
 	})
 }
 
@@ -189,10 +221,10 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 	}
 	if err := m.Start(ctx); err != nil {
 		log.Error("Error starting "+m.Type(), err)
-		b.states.Set(m.Topic(), false)
+		b.states.Store(m.Topic(), false)
 		return
 	}
-	b.states.Set(m.Topic(), true)
+	b.states.Store(m.Topic(), true)
 	t := b.client.SubscribeMultiple(metricTopics(m), b.handleMetric(i, m))
 	if err := waitToken(ctx, t); err != nil {
 		log.Error("Error subscribing to "+m.Topic(), err)
@@ -212,9 +244,20 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 		log.Info(metric.Type() + " started")
 		for err := range ch {
 			if err == nil {
-				b.updates <- metric
+				if err = b.updateStatus(ctx, metric.Topic(), true); err != nil {
+					log.Warn("Unable to update status", "metric", metric.Type(), "err", err)
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case b.updates <- metric:
+				}
 			} else if err != metrics.ErrNoChange {
 				log.Warn("Error updating metric", "metric", metric.Type(), "err", err)
+				if err = b.updateStatus(ctx, metric.Topic(), false); err != nil {
+					log.Warn("Unable to update status", "metric", metric.Type(), "err", err)
+				}
 			}
 		}
 		log.Info(metric.Type() + " done")
@@ -223,42 +266,35 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 
 // start starts listening to the metrics.
 func (b *Bridge) start(ctx context.Context) {
-	b.ready = make(chan struct{})
-	b.done = make(chan struct{})
-	b.updates = make(chan metrics.Metric)
-	b.states.m = make(map[string]bool, len(b.m))
-	ctx, b.cancel = context.WithCancel(ctx)
-	go func() {
-		defer close(b.ready)
-		for i, m := range b.m {
-			b.startMetric(ctx, i, m)
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+	defer close(b.ready)
+	for i, m := range b.m {
+		b.startMetric(ctx, i, m)
+		select {
+		case <-ctx.Done():
+			return
+		default:
 		}
-		if err := b.publishBirthOrWill(ctx, true); err != nil {
-			log.Error("Unable to publish birth message", err)
-		}
-		go b.publishUpdates(ctx)
-		if b.topicPrefix == "" {
-			b.topicPrefix = "mqttop"
-		}
-		t := b.client.Subscribe(b.topicPrefix+"/bridge/stop", 0, func(_ mqtt.Client, msg mqtt.Message) {
-			msg.Ack()
-			b.Disconnect()
-		})
-		if err := waitToken(ctx, t); err != nil {
-			log.Error("Unable to subscribe to stop topic", err)
-		}
-	}()
-
-	return
+	}
+	if err := b.publishStatus(ctx, false); err != nil {
+		log.Error("Unable to publish birth message", err)
+	}
+	go b.publishUpdates(ctx)
+	if b.topicPrefix == "" {
+		b.topicPrefix = "mqttop"
+	}
+	t := b.client.Subscribe(b.topicPrefix+"/bridge/stop", 0, func(_ mqtt.Client, msg mqtt.Message) {
+		msg.Ack()
+		b.Disconnect()
+	})
+	if err := waitToken(ctx, t); err != nil {
+		log.Error("Unable to subscribe to stop topic", err)
+		b.ready <- err
+	}
 }
 
 // Ready returns a channel that can be used to wait until all metrics have been started.
-func (b *Bridge) Ready() <-chan struct{} {
+// If an error is encountered while starting metrics, it will be sent on this channel.
+func (b *Bridge) Ready() <-chan error {
 	return b.ready
 }
 
@@ -283,7 +319,7 @@ func (b *Bridge) Disconnect() {
 	if !b.client.IsConnected() {
 		return
 	}
-	if err := b.publishBirthOrWill(nil, false); err != nil {
+	if err := b.publishStatus(nil, true); err != nil {
 		log.Warn("Unable to publish LWT on graceful disconnect", err)
 	}
 	b.client.Disconnect(500)

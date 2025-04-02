@@ -69,19 +69,19 @@ func BannerTemplate() string {
 const fullDocsFooter = `Full documentation is available at:
 https://pkg.go.dev/github.com/lone-faerie/mqttop`
 
-// ExitErr is an error that should cause the program to exit with the given code.
-type ExitErr struct {
+// ExitError is an error that should cause the program to exit with the given code.
+type ExitError struct {
 	Err  error
 	Code int
 }
 
-func (e *ExitErr) Error() string {
+func (e *ExitError) Error() string {
 	return e.Err.Error()
 }
 
 func main() {
 	if c, err := RootCommand.ExecuteC(); err != nil {
-		if exit, ok := err.(*ExitErr); ok {
+		if exit, ok := err.(*ExitError); ok {
 			os.Exit(exit.Code)
 		}
 		c.PrintErrln("Error:", err)
