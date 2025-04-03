@@ -51,7 +51,6 @@ type Disks struct {
 
 	mu    sync.RWMutex
 	once  sync.Once
-	group errgroup.Group
 	stop  context.CancelFunc
 	ch    chan error
 }
@@ -154,7 +153,17 @@ func (d *Disks) loop(ctx context.Context) {
 			}
 			ch = d.ch
 		case <-rescanC:
-			d.Rescan()
+			err = d.Rescan()
+			if err == nil {
+				select {
+				case <-ctx.Done():
+					return
+				case d.ch <- ErrRescanned:
+				}
+			} else if err != ErrNoChange {
+				ch = d.ch
+				break
+			}
 			select {
 			case <-d.tick.C:
 				err = d.Update()
@@ -198,6 +207,7 @@ func (d *Disks) rescan(firstRun bool) error {
 	if firstRun {
 		d.disks = make(map[string]*Disk, len(mnts))
 	}
+	var changed bool
 	for name, mnt := range mnts {
 		if d.cfg.Excluded(name) {
 			continue
@@ -222,6 +232,7 @@ func (d *Disks) rescan(firstRun bool) error {
 				disk.used = 0
 			}
 			d.disks[name] = disk
+			changed = true
 		}
 	}
 	if firstRun {
@@ -232,6 +243,10 @@ func (d *Disks) rescan(firstRun bool) error {
 			continue
 		}
 		delete(d.disks, name)
+		changed = true
+	}
+	if !changed {
+		return ErrNoChange
 	}
 	return nil
 }
@@ -249,10 +264,11 @@ func (d *Disks) Rescan() error {
 func (d *Disks) Update() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	var group errgroup.Group
 	for name := range d.disks {
-		d.group.Go(d.disks[name].Update)
+		group.Go(d.disks[name].Update)
 	}
-	return d.group.Wait()
+	return group.Wait()
 }
 
 // Updated returns the channel that updates will be sent on. A received value

@@ -25,6 +25,7 @@ var (
 	ErrNoChange       = errors.New("no change")
 	ErrNotFound       = errors.New("not found")
 	ErrNotSupported   = errors.New("not supported")
+	ErrRescanned      = errors.New("rescanned")
 )
 
 func errAlreadyRunning(metric string) error {

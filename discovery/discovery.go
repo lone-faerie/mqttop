@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/eclipse/paho.mqtt.golang"
+
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/log"
 )
@@ -85,11 +86,13 @@ func New(cfg *config.DiscoveryConfig) (*Discovery, error) {
 		Origin:            NewOrigin(),
 		Device:            dev,
 		Components:        make(map[string]Component),
-		Nodes:             make(map[string][]string),
 		NodeID:            cfg.NodeID,
 		AvailabilityTopic: cfg.Availability,
 		cfg:               cfg,
 		Method:            cfg.Method,
+	}
+	if d.Method == "nodes" || d.Method == "metrics" {
+		d.Nodes = make(map[string][]string)
 	}
 	if d.NodeID == "" {
 		d.NodeID = "mqttop"
@@ -185,7 +188,7 @@ func (d *Discovery) publishDevice(ctx context.Context, c mqtt.Client, migrate bo
 		d.Nodes = nodes
 	}()
 	if migrate {
-		if err := d.migrate(ctx, c, d.NodeID); err != nil {
+		if err := d.Migrate(ctx, c); err != nil {
 			return err
 		}
 	}
@@ -271,10 +274,10 @@ func (d *Discovery) publishComponents(ctx context.Context, c mqtt.Client, migrat
 }
 
 func (d *Discovery) publishNodes(ctx context.Context, c mqtt.Client, migrate bool, nodes ...string) error {
-	nn := d.Nodes
+	dNodes := d.Nodes
 	d.Nodes = nil
 	defer func() {
-		d.Nodes = nn
+		d.Nodes = dNodes
 	}()
 	nodeD := Discovery{
 		Origin:     d.Origin,
@@ -287,10 +290,10 @@ func (d *Discovery) publishNodes(ctx context.Context, c mqtt.Client, migrate boo
 	if len(nodes) > 0 {
 		it = slices.Values(nodes)
 	} else {
-		it = maps.Keys(nn)
+		it = maps.Keys(dNodes)
 	}
 	for node := range it {
-		cmps, ok := nn[node]
+		cmps, ok := dNodes[node]
 		if !ok || len(cmps) == 0 {
 			continue
 		}
@@ -314,7 +317,7 @@ func (d *Discovery) publishNodes(ctx context.Context, c mqtt.Client, migrate boo
 // Publish publishes the discovery payload. If migrate is true, Publish migrates the discovery payload
 // either from a device discovery to individual component discoveries, or from individual component
 // discoveries to a device discovery.
-func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool) (err error) {
+func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool, args ...string) (err error) {
 	if err = d.Wait(ctx, c); err != nil {
 		return err
 	}
@@ -334,10 +337,10 @@ func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool) (e
 		err = d.publishDevice(ctx, c, migrate)
 	case "components":
 		log.Debug("Publishing discovery", "method", "components")
-		err = d.publishComponents(ctx, c, migrate)
+		err = d.publishComponents(ctx, c, migrate, args...)
 	case "nodes", "metrics":
 		log.Debug("Publishing discovery", "method", "nodes")
-		err = d.publishNodes(ctx, c, migrate)
+		err = d.publishNodes(ctx, c, migrate, args...)
 	}
 	if err != nil {
 		log.Error("Unsuccessful discovery", err)
@@ -345,9 +348,22 @@ func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool) (e
 	return
 }
 
+func shouldMigrate(method, old string) bool {
+	switch old {
+	case "", "device":
+		return method == "components"
+	case "components":
+		return method == "" || method == "device"
+	}
+	return false
+}
+
 // Diff adds an empty component to d for each component in old that
 // isn't already in d. Diff returns true if d should be migrated.
 func (d *Discovery) Diff(old *Discovery) bool {
+	if old == nil {
+		return false
+	}
 	for name, cmp := range old.Components {
 		if _, ok := d.Components[name]; ok || len(cmp) <= 1 {
 			continue
@@ -356,98 +372,5 @@ func (d *Discovery) Diff(old *Discovery) bool {
 			Platform: cmp[Platform],
 		}
 	}
-	return ((d.Method == "" || d.Method == "device") && !(old.Method == "" || old.Method == "device")) ||
-		(d.Method == "components" && old.Method != "components")
-}
-
-func (d *Discovery) removeComponents(ctx context.Context, c mqtt.Client, components ...string) error {
-	payload := []byte{}
-	for name, cmp := range d.Components {
-		if len(components) > 0 && !slices.Contains(components, name) {
-			continue
-		}
-		platform := cmp[Platform].(string)
-		topic, err := d.Topic(d.cfg.Prefix, platform, d.NodeID, name)
-		if err != nil {
-			return err
-		}
-		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-t.Done():
-		}
-		if err := t.Error(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (d *Discovery) removeDevice(ctx context.Context, c mqtt.Client) error {
-	return d.removeDeviceNode(ctx, c, d.NodeID)
-}
-
-func (d *Discovery) removeDeviceNode(ctx context.Context, c mqtt.Client, nodeID string) error {
-	topic, err := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
-	if err != nil {
-		return err
-	}
-	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, []byte{})
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-t.Done():
-	}
-	return t.Error()
-}
-
-// Migrate publishes `{"migrate_discovery": true}` to each component's
-// discovery topic. This is the first step required for migrating
-// component discoveries to a device discovery.
-func (d *Discovery) Migrate(ctx context.Context, c mqtt.Client) error {
-	return d.migrate(ctx, c, d.NodeID)
-}
-
-func (d *Discovery) migrate(ctx context.Context, c mqtt.Client, nodeID string) error {
-	migrate := []byte("{\"migrate_discovery\": true}")
-	for name, cmp := range d.Components {
-		platform := cmp[Platform].(string)
-		topic, err := d.Topic(d.cfg.Prefix, platform, nodeID, name)
-		if err != nil {
-			return err
-		}
-		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, migrate)
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-t.Done():
-		}
-		if err := t.Error(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Rollback publishes `{"migrate_discovery": true}` to the device discovery topic.
-// This is the first step required for rolling back a device discovery to individual
-// component discoveries.
-func (d *Discovery) Rollback(ctx context.Context, c mqtt.Client) error {
-	return d.rollback(ctx, c, d.NodeID)
-}
-
-func (d *Discovery) rollback(ctx context.Context, c mqtt.Client, nodeID string) error {
-	migrate := []byte("{\"migrate_discovery\": true}")
-	topic, err := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
-	if err != nil {
-		return err
-	}
-	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, migrate)
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-t.Done():
-	}
-	return t.Error()
+	return shouldMigrate(d.Method, old.Method)
 }

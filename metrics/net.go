@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"slices"
 	"strconv"
 	"sync"
@@ -52,11 +53,10 @@ type Net struct {
 	rescanInterval time.Duration
 	rescanTick     *time.Ticker
 
-	mu    sync.RWMutex
-	once  sync.Once
-	group errgroup.Group
-	stop  context.CancelFunc
-	ch    chan error
+	mu   sync.RWMutex
+	once sync.Once
+	stop context.CancelFunc
+	ch   chan error
 }
 
 // NewNet returns a new [Net] initialized from cfg. If there is any error
@@ -114,6 +114,13 @@ func (n *Net) skipInterface(iface string) bool {
 		return true
 	}
 	defer nd.Close()
+	if slices.ContainsFunc(n.cfg.Include, func(i config.NetIfaceConfig) bool {
+		return i.Interface == iface
+	}) {
+		return false
+	} else if len(n.cfg.Include) > 0 {
+		return true
+	}
 	var skip bool
 	if n.cfg.OnlyPhysical {
 		b := nd.Contains("device")
@@ -134,6 +141,7 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 	if firstRun {
 		n.interfaces = make(map[string]*NetInterface, len(interfaces))
 	}
+	var changed bool
 	for i := range interfaces {
 		addrs, err := interfaces[i].Addrs()
 		if err != nil {
@@ -150,7 +158,6 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 			}
 			var (
 				ratestr string
-				include bool
 			)
 			for j := range n.cfg.Include {
 				if n.cfg.Include[j].Interface != ifname {
@@ -158,16 +165,15 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 				}
 				ifname = n.cfg.Include[j].FormatName(ifname)
 				ratestr = n.cfg.Include[j].RateUnit
-				include = true
 				break
 			}
-			if !include && n.skipInterface(interfaces[i].Name) {
+			if n.skipInterface(interfaces[i].Name) {
 				if !firstRun {
 					delete(n.interfaces, ifname)
 				}
 				continue
 			}
-			if firstRun {
+			if firstRun || !ok {
 				if ratestr == "" {
 					ratestr = n.cfg.RateUnit
 				}
@@ -181,6 +187,7 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 					IP:        ip,
 					rate:      rate,
 				}
+				changed = true
 			} else {
 				iface.Interface = interfaces[i]
 				if ip != iface.IP {
@@ -189,7 +196,22 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 			}
 		}
 	}
-
+	if firstRun {
+		return nil
+	}
+	for iface := range n.interfaces {
+		if !slices.ContainsFunc(interfaces, func(i net.Interface) bool {
+			return i.Name == iface
+		}) {
+			log.Debug("Deleting interface", "name", iface)
+			delete(n.interfaces, iface)
+			changed = true
+		}
+	}
+	log.Debug("", "interfaces", n.interfaces)
+	if !changed {
+		return ErrNoChange
+	}
 	return nil
 }
 
@@ -241,7 +263,20 @@ func (n *Net) loop(ctx context.Context) {
 			log.Debug("network updated")
 			ch = n.ch
 		case <-rescanC:
-			n.Rescan()
+			err = n.Rescan()
+			if err == nil {
+				log.Debug("network rescanned")
+				select {
+				case <-ctx.Done():
+					return
+				case n.ch <- ErrRescanned:
+				}
+			} else if err != ErrNoChange {
+				ch = n.ch
+				break
+			} else {
+				log.Debug("network rescanned, no change")
+			}
 			select {
 			case <-n.tick.C:
 				err = n.Update()
@@ -272,6 +307,8 @@ func (n *Net) Start(ctx context.Context) (err error) {
 
 // Rescan rescans the system for any new or removed network interfaces.
 func (n *Net) Rescan() error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	return n.parseInterfaces(false)
 }
 
@@ -280,12 +317,13 @@ func (n *Net) Rescan() error {
 // happen automatically every update interval.
 func (n *Net) Update() error {
 	n.mu.Lock()
-	for _, iface := range n.interfaces {
-		n.group.Go(iface.Update)
+	defer n.mu.Unlock()
+	var group errgroup.Group
+	for name, iface := range n.interfaces {
+		log.Debug("Updating interface", "name", name)
+		group.Go(iface.Update)
 	}
-	err := n.group.Wait()
-	n.mu.Unlock()
-	return err
+	return group.Wait()
 }
 
 // Updated returns the channel that updates will be sent on. A received value
@@ -374,9 +412,10 @@ func (n *Net) MarshalJSON() ([]byte, error) {
 // error will not be sent on the channel returned by [Net.Updated] unlike
 // updates that happen automatically every update interval.
 func (iface *NetInterface) Update() error {
+	defer log.Debug("Done updating interface", "name", iface.Name)
 	rx, tx, err := sysfs.NetStatistics(iface.Name)
 	if err != nil {
-		return err
+		return &os.PathError{"open", iface.Name, err}
 	}
 	now := time.Now()
 	iface.Download = rx - iface.lastRx

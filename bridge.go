@@ -30,8 +30,9 @@ type Bridge struct {
 	m            []metrics.Metric
 	states       sync.Map
 
-	updates chan metrics.Metric
-	once    sync.Once
+	updates    chan metrics.Metric
+	rediscover chan metrics.Metric
+	once       sync.Once
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -180,6 +181,9 @@ func (b *Bridge) Start(ctx context.Context) {
 		b.ready = make(chan error)
 		b.done = make(chan struct{})
 		b.updates = make(chan metrics.Metric)
+		if b.discoveryCfg.Enabled {
+			b.rediscover = make(chan metrics.Metric)
+		}
 		//		b.states.MakeSize(len(b.m))
 		ctx, b.cancel = context.WithCancel(ctx)
 		go b.start(ctx)
@@ -219,7 +223,7 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 			log.Info(metric.Type() + " started")
 		}
 		for err := range ch {
-			updated := b.updateStatus(ctx, metric, err == nil || err == metrics.ErrNoChange)
+			updated := b.updateStatus(ctx, metric, err == nil || err == metrics.ErrNoChange || err == metrics.ErrRescanned)
 			switch err {
 			case nil:
 				select {
@@ -235,6 +239,15 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 				case <-ctx.Done():
 					return
 				case b.updates <- metric:
+				}
+			case metrics.ErrRescanned:
+				if b.rediscover == nil {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case b.rediscover <- metric:
 				}
 			default:
 				log.WarnError(metric.Type()+" not updated", err)
@@ -318,6 +331,9 @@ func (b *Bridge) Disconnect() {
 	b.cancel()
 	b.wg.Wait()
 	close(b.updates)
+	if b.rediscover != nil {
+		close(b.rediscover)
+	}
 	time.Sleep(time.Second)
 	log.Info("Disconnected")
 	close(b.done)
@@ -328,10 +344,7 @@ func (b *Bridge) Disconnect() {
 // string, the previous discovery is loaded from the file at path for removing old
 // components.
 func (b *Bridge) Discover(ctx context.Context, path string) (err error) {
-	var (
-		d, old  *discovery.Discovery
-		migrate bool
-	)
+	var d, old *discovery.Discovery
 	d, err = discovery.New(b.discoveryCfg)
 	if err != nil {
 		return err
@@ -347,9 +360,7 @@ func (b *Bridge) Discover(ctx context.Context, path string) (err error) {
 			return err
 		}
 	}
-	if old != nil {
-		migrate = d.Diff(old) && d.Method != "nodes" && d.Method != "metrics"
-	}
+	migrate := d.Diff(old)
 	if err = d.Publish(ctx, b.client, migrate); err != nil {
 		log.Error("Unable to perform discovery", err)
 		return err
@@ -357,6 +368,41 @@ func (b *Bridge) Discover(ctx context.Context, path string) (err error) {
 	if path != "" {
 		err = d.Write(path)
 	}
+	go func() {
+		for m := range b.rediscover {
+			dd, ok := m.(discovery.Discoverer)
+			if !ok {
+				continue
+			}
+			var cmps []string
+			if d.Nodes != nil {
+				node, ok := d.Nodes[m.Type()]
+				if ok && node != nil {
+					d.Nodes[m.Type()] = nil
+					for _, c := range node {
+						cmp, ok := d.Components[c]
+						if !ok {
+							continue
+						}
+						d.Components[c] = discovery.Component{
+							discovery.Platform: cmp[discovery.Platform],
+						}
+					}
+					cmps = node
+				}
+			}
+			dd.Discover(d)
+			if cmps != nil {
+				node, ok := d.Nodes[m.Type()]
+				if ok && len(cmps) > len(node) {
+					d.Nodes[m.Type()] = cmps
+				}
+			}
+			if err := d.Publish(ctx, b.client, false, m.Type()); err != nil {
+				log.Error("Unable to perform discovery", err)
+			}
+		}
+	}()
 	log.Info("Discovery complete")
 	return
 }
