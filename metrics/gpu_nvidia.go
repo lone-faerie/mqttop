@@ -202,9 +202,9 @@ func (g *NvidiaGPU) loop(ctx context.Context) {
 			err = g.Update()
 			if err == ErrNoChange {
 				log.Debug("gpu updated, no change")
-				break
+			} else {
+				log.Debug("gpu updated")
 			}
-			log.Debug("gpu updated")
 			ch = g.ch
 		case ch <- err:
 			ch = nil

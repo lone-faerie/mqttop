@@ -310,8 +310,9 @@ func (c *CPU) loop(ctx context.Context) {
 			if err == ErrNoChange {
 				log.Debug("cpu updated, no change")
 				break
+			} else {
+				log.Debug("cpu updated")
 			}
-			log.Debug("cpu updated")
 			ch = c.ch
 		case ch <- err:
 			ch = nil
@@ -416,7 +417,7 @@ func (c *CPU) Update() (err error) {
 	defer c.mu.Unlock()
 	if c.flags.Has(cpuUsage) {
 		if err := c.updateUsage(); err != nil {
-			log.Warn("can't update CPU usage", "cause", err)
+			log.WarnError("can't update CPU usage", err)
 			c.flags &^= cpuUsage
 		}
 	}

@@ -75,6 +75,14 @@ func Warn(msg string, args ...any) {
 	defaultLogger.Warn(msg, args...)
 }
 
+// WarnError is equivalent to [Warn]("cause", err, args...).
+func WarnError(msg string, err error, args ...any) {
+	if err != nil {
+		args = append([]any{"cause", err}, args...)
+	}
+	defaultLogger.Warn(msg, args...)
+}
+
 // Info logs at [LevelInfo]
 func Info(msg string, args ...any) {
 	defaultLogger.Info(msg, args...)

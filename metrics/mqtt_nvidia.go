@@ -18,7 +18,12 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 	prefix := d.Origin.Name + "_gpu_" + strconv.Itoa(g.index)
 	id := prefix
 	avail := availabilityTemplate(g.Topic())
+	cmps, ok := d.Nodes[g.Type()]
+	if !ok {
+		cmps = make([]string, 0, 7)
+	}
 	if g.flags.Has(gpuUtilization) {
+		cmps = append(cmps, id)
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 g.Name + " usage",
@@ -34,6 +39,7 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 	}
 	if g.flags.Has(gpuPower) {
 		id = prefix + "_power"
+		cmps = append(cmps, id)
 		d.Components[id] = discovery.Component{
 			discovery.Platform:               discovery.Sensor,
 			discovery.Name:                   g.Name + " power",
@@ -51,6 +57,7 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 	}
 	if g.flags.Has(gpuTemperature) {
 		id = prefix + "_temperature"
+		cmps = append(cmps, id)
 		d.Components[id] = discovery.Component{
 			discovery.Platform:               discovery.Sensor,
 			discovery.Name:                   g.Name + " temperature",
@@ -74,6 +81,7 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 			template = "{{ 100 * value_json.memory.used / value_json.memory.total }}"
 		}
 		id = prefix + "_memory"
+		cmps = append(cmps, id)
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 g.Name + " memory",
@@ -88,6 +96,7 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 		}
 		if g.flags.Has(gpuMemory | gpuMemoryV2) {
 			id = prefix + "_memory_total"
+			cmps = append(cmps, id)
 			d.Components[id] = discovery.Component{
 				discovery.Platform:             discovery.Sensor,
 				discovery.Name:                 g.Name + " memory total",
@@ -103,6 +112,7 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 				discovery.EnabledByDefault:     false,
 			}
 			id = prefix + "_memory_free"
+			cmps = append(cmps, id)
 			d.Components[id] = discovery.Component{
 				discovery.Platform:             discovery.Sensor,
 				discovery.Name:                 g.Name + " memory free",
@@ -118,6 +128,7 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 				discovery.EnabledByDefault:     false,
 			}
 			id = prefix + "_memory_used"
+			cmps = append(cmps, id)
 			d.Components[id] = discovery.Component{
 				discovery.Platform:             discovery.Sensor,
 				discovery.Name:                 g.Name + " memory used",
@@ -134,4 +145,5 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 			}
 		}
 	}
+	d.Nodes[g.Type()] = cmps
 }

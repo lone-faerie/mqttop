@@ -44,7 +44,7 @@ func (o *OnceValue[T]) Do(f func() T) T {
 	o.Once.Do(func() {
 		defer func() {
 			o.p = recover()
-			if !valid {
+			if !o.valid {
 				panic(o.p)
 			}
 		}()
@@ -70,7 +70,7 @@ func (o *OnceValues[T1, T2]) Do(f func() (T1, T2)) (T1, T2) {
 	o.Once.Do(func() {
 		defer func() {
 			o.p = recover()
-			if !valid {
+			if !o.valid {
 				panic(o.p)
 			}
 		}()

@@ -92,8 +92,11 @@ func newDir(dcfg *config.DirConfig, cfg *config.Config) (*Dir, error) {
 		d.depth = dcfg.Depth
 	}
 	if !dcfg.Watch {
-		d.size = dirSize(path, 0, d.depth)
+		d.size = uint64(info.Size()) + dirSize(d.path, 0, d.depth)
+		log.Debug("Dir initial size", "path", d.path, "size", d.size)
 		d.byteSize = byteSize(dcfg.SizeUnit, d.size)
+		d.size = 0
+		log.Debug("Unwatched dir", "path", d.path)
 		return d, nil
 	}
 	d.watched = map[string]*dirEntry{
@@ -268,21 +271,18 @@ func (d *Dir) loop(ctx context.Context) {
 		return
 	}
 	var (
-		ch chan error
+		ch  chan error
+		err error
 	)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-d.tick.C:
-			size := dirSize(d.path, 0, d.depth)
-			d.mu.Lock()
-			if size != d.size {
-				ch = d.ch
-			}
-			d.size = size
-			d.mu.Unlock()
-		case ch <- nil:
+			err = d.Update()
+			log.Debug("dir updated", "path", d.path)
+			ch = d.ch
+		case ch <- err:
 			ch = nil
 		}
 	}
@@ -338,6 +338,7 @@ func dirSize(path string, depth, maxDepth int) (size uint64) {
 			size += uint64(info.Size())
 		}
 	}
+	log.Debug("Dir size", "path", path, "size", size)
 	return
 }
 
@@ -440,10 +441,11 @@ func (d *Dir) update(path string, op fsnotify.Op) error {
 }
 
 func (d *Dir) updateSlow() error {
-	if _, err := file.Stat(d.path); err != nil {
+	info, err := file.Stat(d.path)
+	if err != nil {
 		return err
 	}
-	size := dirSize(d.path, 0, d.depth)
+	size := uint64(info.Size()) + dirSize(d.path, 0, d.depth)
 	if size == d.size {
 		return ErrNoChange
 	}
@@ -458,9 +460,7 @@ func (d *Dir) Update() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.watched == nil {
-		err := d.updateSlow()
-		d.ch <- err
-		return err
+		return d.updateSlow()
 	}
 	for path := range d.watched {
 		d.update(path, fsnotify.Write)

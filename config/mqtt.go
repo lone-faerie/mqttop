@@ -62,6 +62,7 @@ func (cfg *MQTTConfig) ClientOptions() *mqtt.ClientOptions {
 	o.AddBroker(cfg.Broker)
 	o.SetClientID(cfg.ClientID)
 	o.SetUsername(cfg.Username).SetPassword(cfg.Password)
+	o.SetResumeSubs(true)
 	if cfg.KeepAlive > 0 {
 		o.SetKeepAlive(cfg.KeepAlive)
 	}
@@ -76,6 +77,9 @@ func (cfg *MQTTConfig) ClientOptions() *mqtt.ClientOptions {
 	}
 	if cfg.WriteTimeout > 0 {
 		o.SetWriteTimeout(cfg.WriteTimeout)
+	}
+	if cfg.BirthWillEnabled {
+		o.SetWill(cfg.BirthWillTopic, "offline", 1, true)
 	}
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
 		o.SetTLSConfig(&tls.Config{

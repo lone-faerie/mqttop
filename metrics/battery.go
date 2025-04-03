@@ -196,9 +196,9 @@ func (b *Battery) loop(ctx context.Context) {
 			err = b.Update()
 			if err == ErrNoChange {
 				log.Debug("battery updated, no change")
-				break
+			} else {
+				log.Debug("battery updated")
 			}
-			log.Debug("battery updated")
 			ch = b.ch
 		case ch <- err:
 			ch = nil

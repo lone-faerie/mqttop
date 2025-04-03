@@ -149,10 +149,9 @@ func (d *Disks) loop(ctx context.Context) {
 			err = d.Update()
 			if err == ErrNoChange {
 				log.Debug("disks updated, no change")
-				// err = nil
-				break
+			} else {
+				log.Debug("disks updated", "err", err)
 			}
-			log.Debug("disks updated", "err", err)
 			ch = d.ch
 		case <-rescanC:
 			d.Rescan()
@@ -163,8 +162,9 @@ func (d *Disks) loop(ctx context.Context) {
 					log.Debug("disks updated, no change")
 					err = nil
 					//break
+				} else {
+					log.Debug("disks updated", "err", err)
 				}
-				log.Debug("disks updated", "err", err)
 				ch = d.ch
 			default:
 			}
@@ -356,7 +356,7 @@ func (d *Disk) Update() (err error) {
 
 	r, w, t, e := d.BlockIO.Read()
 	if e != nil {
-		log.Warn("Can't read block io", "mnt", d.Mnt, "cause", err)
+		log.WarnError("Can't read block io", err, "mnt", d.Mnt)
 		d.showIO = false
 		return e
 	}

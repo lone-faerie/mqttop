@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -250,20 +254,82 @@ func PrintBanner(cmd *cobra.Command) error {
 	return err
 }
 
+// Adapted from https://github.com/caddyserver/caddy/blob/master/cmd/commandfuncs.go#L44
 func runDetached(cmd *cobra.Command, args []string) error {
-	c := exec.Command(os.Args[0], os.Args[1:]...)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+
+	c := exec.Command(os.Args[0], "--pingback", ln.Addr().String())
 	if errors.Is(c.Err, exec.ErrDot) {
 		c.Err = nil
 	}
+	c.Args = append(c.Args, os.Args[1:]...)
 	c.Args = slices.DeleteFunc(c.Args, func(s string) bool { return s == "-d" || s == "--detach" })
-	return c.Start()
+
+	stdin, err := c.StdinPipe()
+	if err != nil {
+		return err
+	}
+	//c.Stdout = cmd.OutOrStdout()
+	//c.Stderr = cmd.ErrOrStderr()
+
+	expect := make([]byte, 32)
+	if _, err = rand.Read(expect); err != nil {
+		return err
+	}
+
+	go func() {
+		_, _ = stdin.Write(expect)
+		stdin.Close()
+	}()
+
+	if err = c.Start(); err != nil {
+		return err
+	}
+
+	success, exit := make(chan struct{}), make(chan error)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				break
+			}
+			if err = handlePingbackConn(conn, expect); err == nil {
+				close(success)
+				break
+			}
+		}
+	}()
+	go func() {
+		err := c.Wait()
+		exit <- err
+	}()
+
+	select {
+	case <-success:
+		log.Info("started in background", "pid", c.Process.Pid)
+	case err := <-exit:
+		return err
+	}
+	return nil
+}
+
+func handlePingbackConn(conn net.Conn, expect []byte) error {
+	defer conn.Close()
+	confirmationBytes, err := io.ReadAll(io.LimitReader(conn, 32))
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(confirmationBytes, expect) {
+		return fmt.Errorf("wrong confirmation: %x", confirmationBytes)
+	}
+	return nil
 }
 
 func runBridge(cmd *cobra.Command, args []string) error {
-	if Detach {
-		return runDetached(cmd, args)
-	}
-
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 
@@ -271,20 +337,24 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	bridge := mqttop.New(cfg)
 	if err := bridge.Connect(ctx); err != nil {
 		log.Error("Not connected.", err)
 		return &ExitError{err, 1}
 	}
+	log.Debug("Connected")
 	defer func() {
-		cancel()
-		bridge.Disconnect()
+		if bridge.IsConnected() {
+			bridge.Disconnect()
+		}
 		log.Info("Done")
 	}()
 
 	bridge.Start(ctx)
+	log.Debug("Start called")
 	select {
 	case err := <-bridge.Ready():
 		if err != nil {
@@ -294,15 +364,31 @@ func runBridge(cmd *cobra.Command, args []string) error {
 			discoveryPath := filepath.Join(filepath.Dir(ConfigPath[0]), "discovery.json")
 			bridge.Discover(ctx, discoveryPath)
 		}
-	case <-c:
+	case <-ctx.Done():
 		return nil
 	}
 	cfg = nil
 
+	if pingback, _ := cmd.Flags().GetString("pingback"); pingback != "" {
+		confirmationBytes, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return &ExitError{err, 1}
+		}
+		conn, err := net.Dial("tcp", pingback)
+		if err != nil {
+			return &ExitError{err, 1}
+		}
+		_, err = conn.Write(confirmationBytes)
+		conn.Close()
+		if err != nil {
+			return &ExitError{err, 1}
+		}
+	}
+
 	select {
-	case <-bridge.Done():
-	case <-c:
+	case <-ctx.Done():
 		log.Debug("Received signal")
+	case <-bridge.Done():
 	}
 	return nil
 }

@@ -12,47 +12,10 @@ import (
 	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/discovery"
+	//	"github.com/lone-faerie/mqttop/internal/syncutil"
 	"github.com/lone-faerie/mqttop/log"
 	"github.com/lone-faerie/mqttop/metrics"
 )
-
-type stateMap struct {
-	m  map[string]bool
-	mu sync.Mutex
-}
-
-func (m *stateMap) Load(key string) (state, ok bool) {
-	m.mu.Lock()
-	state, ok = m.m[key]
-	m.mu.Unlock()
-	return
-}
-
-func (m *stateMap) Store(key string, state bool) {
-	m.mu.Lock()
-	m.m[key] = state
-	m.mu.Unlock()
-}
-
-func (m *stateMap) Swap(key string, state bool) (old, ok bool) {
-	m.mu.Lock()
-	old, ok = m.m[key]
-	m.m[key] = state
-	m.mu.Unlock()
-	return
-}
-
-func (m *stateMap) Delete(key string) {
-	m.mu.Lock()
-	delete(m.m, key)
-	m.mu.Unlock()
-}
-
-func (m *stateMap) MarshalJSON() ([]byte, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return json.Marshal(m.m)
-}
 
 var logOnce sync.Once
 
@@ -65,7 +28,7 @@ type Bridge struct {
 	topicPrefix  string
 	discoveryCfg *config.DiscoveryConfig
 	m            []metrics.Metric
-	states       stateMap
+	states       sync.Map
 
 	updates chan metrics.Metric
 	once    sync.Once
@@ -81,9 +44,7 @@ type Bridge struct {
 // The bridge must have [Bridge.Connect] and [Bridge.Ready] called on it before it may be used.
 // This follows the convention of [mqtt.NewClient] as well as waiting for metrics to be ready.
 func New(cfg *config.Config) *Bridge {
-	opts := cfg.MQTT.ClientOptions().SetWill(
-		cfg.MQTT.BirthWillTopic, "offline", 1, true,
-	)
+	opts := cfg.MQTT.ClientOptions()
 	client := mqtt.NewClient(opts)
 	return NewWithClient(cfg, client)
 }
@@ -144,12 +105,17 @@ func (b *Bridge) handleMetric(i int, m metrics.Metric) mqtt.MessageHandler {
 	}
 }
 
-func (b *Bridge) updateStatus(ctx context.Context, key string, state bool) error {
-	old, ok := b.states.Swap(key, state)
-	if ok && old == state {
-		return nil
+func (b *Bridge) updateStatus(ctx context.Context, m metrics.Metric, state bool) (updated bool) {
+	key := m.Topic()
+	if updated = b.states.CompareAndSwap(key, !state, state); !updated {
+		return
 	}
-	return b.publishStatus(ctx, false)
+	log.Debug("Status changed", "key", key, "from", !state, "to", state)
+	if err := b.publishStatus(ctx, false); err != nil {
+		log.WarnError("Unable to update status", err, "metric", m.Type())
+		updated = false
+	}
+	return
 }
 
 func (b *Bridge) publishStatus(ctx context.Context, lwt bool) (err error) {
@@ -163,7 +129,12 @@ func (b *Bridge) publishStatus(ctx context.Context, lwt bool) (err error) {
 	if lwt {
 		data = opts.WillPayload()
 	} else {
-		data, err = json.Marshal(&b.states)
+		states := make(map[string]bool)
+		b.states.Range(func(k, v any) bool {
+			states[k.(string)] = v.(bool)
+			return true
+		})
+		data, err = json.Marshal(states)
 		if err != nil {
 			return
 		}
@@ -209,7 +180,7 @@ func (b *Bridge) Start(ctx context.Context) {
 		b.ready = make(chan error)
 		b.done = make(chan struct{})
 		b.updates = make(chan metrics.Metric)
-		b.states.m = make(map[string]bool, len(b.m))
+		//		b.states.MakeSize(len(b.m))
 		ctx, b.cancel = context.WithCancel(ctx)
 		go b.start(ctx)
 	})
@@ -217,6 +188,7 @@ func (b *Bridge) Start(ctx context.Context) {
 
 func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 	if m.Topic() == "" {
+		log.Debug("No topic, skipping", "metric", m.Type())
 		return
 	}
 	if err := m.Start(ctx); err != nil {
@@ -241,23 +213,31 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 		}()
 		defer b.wg.Done()
 		ch := metric.Updated()
-		log.Info(metric.Type() + " started")
+		if d, ok := metric.(*metrics.Dir); ok {
+			log.Info(metric.Type()+" started", "path", d)
+		} else {
+			log.Info(metric.Type() + " started")
+		}
 		for err := range ch {
-			if err == nil {
-				if err = b.updateStatus(ctx, metric.Topic(), true); err != nil {
-					log.Warn("Unable to update status", "metric", metric.Type(), "err", err)
-					continue
+			updated := b.updateStatus(ctx, metric, err == nil || err == metrics.ErrNoChange)
+			switch err {
+			case nil:
+				select {
+				case <-ctx.Done():
+					return
+				case b.updates <- metric:
+				}
+			case metrics.ErrNoChange:
+				if !updated {
+					break
 				}
 				select {
 				case <-ctx.Done():
 					return
 				case b.updates <- metric:
 				}
-			} else if err != metrics.ErrNoChange {
-				log.Warn("Error updating metric", "metric", metric.Type(), "err", err)
-				if err = b.updateStatus(ctx, metric.Topic(), false); err != nil {
-					log.Warn("Unable to update status", "metric", metric.Type(), "err", err)
-				}
+			default:
+				log.WarnError(metric.Type()+" not updated", err)
 			}
 		}
 		log.Info(metric.Type() + " done")
@@ -266,6 +246,7 @@ func (b *Bridge) startMetric(ctx context.Context, i int, m metrics.Metric) {
 
 // start starts listening to the metrics.
 func (b *Bridge) start(ctx context.Context) {
+	log.Debug("Starting")
 	defer close(b.ready)
 	for i, m := range b.m {
 		b.startMetric(ctx, i, m)
@@ -314,13 +295,21 @@ func (b *Bridge) Connect(ctx context.Context) error {
 	return waitToken(ctx, t)
 }
 
+// IsConnected returns a bool signifying whether the bridge is connected or not.
+func (b *Bridge) IsConnected() bool {
+	return b.client.IsConnected()
+}
+
+// IsConnectionOpen return a bool signifying whether the bridge has an active
+// connection to mqtt broker, i.e not in disconnected or reconnect mode
+func (b *Bridge) IsConnectionOpen() bool {
+	return b.client.IsConnectionOpen()
+}
+
 // Disconnect will end the connection with the server.
 func (b *Bridge) Disconnect() {
-	if !b.client.IsConnected() {
-		return
-	}
 	if err := b.publishStatus(nil, true); err != nil {
-		log.Warn("Unable to publish LWT on graceful disconnect", err)
+		log.WarnError("Unable to publish LWT on graceful disconnect", err)
 	}
 	b.client.Disconnect(500)
 	if b.ready != nil {
@@ -339,13 +328,10 @@ func (b *Bridge) Disconnect() {
 // string, the previous discovery is loaded from the file at path for removing old
 // components.
 func (b *Bridge) Discover(ctx context.Context, path string) (err error) {
-	var old, d *discovery.Discovery
-	if path != "" {
-		old, err = discovery.Load(path)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
+	var (
+		d, old  *discovery.Discovery
+		migrate bool
+	)
 	d, err = discovery.New(b.discoveryCfg)
 	if err != nil {
 		return err
@@ -355,10 +341,14 @@ func (b *Bridge) Discover(ctx context.Context, path string) (err error) {
 			dd.Discover(d)
 		}
 	}
-	//delete(d.Components, d.Origin.Name+"_battery_state")
-	var migrate bool
+	if path != "" {
+		old, err = discovery.Load(path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
 	if old != nil {
-		migrate = d.Diff(old)
+		migrate = d.Diff(old) && d.Method != "nodes" && d.Method != "metrics"
 	}
 	if err = d.Publish(ctx, b.client, migrate); err != nil {
 		log.Error("Unable to perform discovery", err)
