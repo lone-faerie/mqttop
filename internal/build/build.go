@@ -24,16 +24,36 @@ func semver(v string) string {
 	return v[loc[0]:loc[1]]
 }
 
+// Package returns the current package. This is set by including
+// the following ldflag:
+//
+//	-X 'github.com/lone-faerie/mqttop/internal/pkg=<package>'
+//
+// If the flag is not included, the value is loaded from [debug.ReadBuildInfo]
 func Package() string {
 	once.Do(load)
 	return pkg
 }
 
+// Version returns the current version. This is set by including
+// the following ldflag:
+//
+//	-X 'github.com/lone-faerie/mqttop/internal/version=<version>'
+//
+// If the flag is not included, the value is loaded from [debug.ReadBuildInfo]
+// If the binary was built with the 'debug' tag, the value " (dev)" is appended
+// to the version
 func Version() string {
 	once.Do(load)
 	return version
 }
 
+// BuildTime returns the time the binary was built. This is set by including
+// the following ldflag:
+//
+//	-X 'github.com/lone-faerie/mqttop/internal/buildTime=<build time>'
+//
+// If the flag is not included, the value is loaded from [debug.ReadBuildInfo]
 func BuildTime() string {
 	once.Do(load)
 	return buildTime

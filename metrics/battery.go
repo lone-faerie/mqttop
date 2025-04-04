@@ -445,14 +445,15 @@ func (b *Battery) Stop() {
 	b.mu.Unlock()
 }
 
-// String implements [fmt.Stringer]
+// String implements [fmt.Stringer] and returns the battery kind.
 func (bat *Battery) String() string {
 	bat.mu.RLock()
 	defer bat.mu.RUnlock()
 	return bat.bat.Kind
 }
 
-// AppendText implements [encoding/TextAppender]
+// AppendText implements [encoding/TextAppender] and appends the JSON-encoded
+// representation of bat to b.
 func (bat *Battery) AppendText(b []byte) ([]byte, error) {
 	bat.mu.RLock()
 	defer bat.mu.RUnlock()

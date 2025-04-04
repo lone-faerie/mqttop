@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 )
 
+// Once is equivalent to [sync.Once] with the ability to be reset.
 type Once struct {
 	_ noCopy
 
@@ -12,6 +13,8 @@ type Once struct {
 	m    sync.Mutex
 }
 
+// Do calls the function f if and only if Do is being called for the
+// first time for this instance of [Once].
 func (o *Once) Do(f func()) {
 	if o.done.Load() == 0 {
 		o.doSlow(f)
@@ -27,12 +30,14 @@ func (o *Once) doSlow(f func()) {
 	}
 }
 
+// Reset resets o to be reused.
 func (o *Once) Reset() bool {
 	o.m.Lock()
 	defer o.m.Unlock()
 	return o.done.CompareAndSwap(1, 0)
 }
 
+// OnceValue is the struct equivalent of [sync.OnceValue] with the ability to be reset.
 type OnceValue[T any] struct {
 	Once
 	valid  bool
@@ -58,6 +63,7 @@ func (o *OnceValue[T]) Do(f func() T) T {
 	return o.result
 }
 
+// OnceValues is the struct equivalent of [sync.OnceValues] with the ability to be reset.
 type OnceValues[T1, T2 any] struct {
 	Once
 	valid bool

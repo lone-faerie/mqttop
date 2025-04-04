@@ -485,12 +485,13 @@ func (d *Dir) Stop() {
 	d.mu.Unlock()
 }
 
-// String implements [fmt.Stringer]
+// String implements [fmt.Stringer] and returns the path of the directory.
 func (d *Dir) String() string {
 	return d.path
 }
 
-// AppendText implements [encoding/TextAppender]
+// AppendText implements [encoding/TextAppender] and appends the JSON-encoded
+// representation of d to b.
 func (d *Dir) AppendText(b []byte) ([]byte, error) {
 	d.mu.RLock()
 	b = append(b, "{\"path\": \""...)

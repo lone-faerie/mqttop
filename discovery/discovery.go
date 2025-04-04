@@ -1,4 +1,6 @@
 // Package discovery provides structures to support Home Assistant MQTT Discovery.
+//
+// See https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 package discovery
 
 import (
@@ -67,7 +69,7 @@ func Load(path string) (*Discovery, error) {
 	return d, nil
 }
 
-// New returns a new Discovery struct initialized from the provided config and components.
+// New returns a new Discovery struct initialized from the provided config.
 func New(cfg *config.DiscoveryConfig) (*Discovery, error) {
 	dev, err := NewDevice()
 	if err != nil {

@@ -327,8 +327,9 @@ func (n *Net) Update() error {
 }
 
 // Updated returns the channel that updates will be sent on. A received value
-// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
-// error is the first error encountered during updating and indicates a failed update.
+// of [ErrNoChange] indicates there were no changes between updates and a value of
+// [ErrRescanned] indicates a change from rescanning. Any other non-nil error is the
+// first error encountered during updating and indicates a failed update.
 func (n *Net) Updated() <-chan error {
 	return n.ch
 }
@@ -343,7 +344,10 @@ func (n *Net) Stop() {
 	n.mu.Unlock()
 }
 
-// String implements [fmt.Stringer]
+// String implements [fmt.Stringer] and returns a string representing the net
+// in the form of:
+//
+//	# interfaces (# running)
 func (n *Net) String() string {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
@@ -356,7 +360,8 @@ func (n *Net) String() string {
 	return fmt.Sprintf("%d interfaces (%d running)", len(n.interfaces), running)
 }
 
-// AppendText implements [encoding/TextAppender]
+// AppendText implements [encoding/TextAppender] and appends the JSON-encoded
+// representation of n to b.
 func (n *Net) AppendText(b []byte) ([]byte, error) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()

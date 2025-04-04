@@ -5,19 +5,6 @@ import (
 	"fmt"
 )
 
-type Error struct {
-	Metric string
-	Err    error
-}
-
-func (e *Error) Error() string {
-	return e.Metric + " is " + e.Err.Error()
-}
-
-func (e *Error) Unwrap() error {
-	return e.Err
-}
-
 var (
 	ErrAlreadyRunning = errors.New("already running")
 	ErrDisabled       = errors.New("metric disabled")

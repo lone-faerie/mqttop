@@ -21,20 +21,24 @@ import (
 // Config should be created with a call to [Default], [Read], or [Load] as
 // some options require further configuration than simply setting.
 type Config struct {
-	Interval    time.Duration   `yaml:"interval"`
-	TopicPrefix string          `yaml:"topic_prefix"`
-	MQTT        MQTTConfig      `yaml:"mqtt,omitempty"`
-	Discovery   DiscoveryConfig `yaml:"discovery,omitempty"`
-	Log         LogConfig       `yaml:"log,omitempty"`
-	CPU         CPUConfig       `yaml:"cpu,omitempty"`
-	Memory      MemoryConfig    `yaml:"memory,omitempty"`
-	Disks       DisksConfig     `yaml:"disks,omitempty"`
-	Net         NetConfig       `yaml:"net,omitempty"`
-	Battery     BatteryConfig   `yaml:"battery,omitempty"`
-	Dirs        []DirConfig     `yaml:"dirs,omitempty"`
-	GPU         GPUConfig       `yaml:"gpu,omitempty"`
+	// Interval is the default update interval for all enabled metrics.
+	// Any metric with an update interval of 0 will use Interval instead.
+	Interval time.Duration `yaml:"interval"`
+	// TopicPrefix is the prefix to all default MQTT topics.
+	// If a topic starts with the prefix "mqttop" will have it
+	// replaced with TopicPrefix.
+	TopicPrefix string `yaml:"topic_prefix"`
 
-	FormatSize func(v int, bits bool) string `yaml:"-"`
+	MQTT      MQTTConfig      `yaml:"mqtt,omitempty"`
+	Discovery DiscoveryConfig `yaml:"discovery,omitempty"`
+	Log       LogConfig       `yaml:"log,omitempty"`
+	CPU       CPUConfig       `yaml:"cpu,omitempty"`
+	Memory    MemoryConfig    `yaml:"memory,omitempty"`
+	Disks     DisksConfig     `yaml:"disks,omitempty"`
+	Net       NetConfig       `yaml:"net,omitempty"`
+	Battery   BatteryConfig   `yaml:"battery,omitempty"`
+	Dirs      []DirConfig     `yaml:"dirs,omitempty"`
+	GPU       GPUConfig       `yaml:"gpu,omitempty"`
 }
 
 func defaultCfg() *Config {

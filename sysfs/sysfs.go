@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/lone-faerie/mqttop/internal/file"
-//	"github.com/lone-faerie/mqttop/log"
+	// "github.com/lone-faerie/mqttop/log"
 )
 
 const MountPath = file.Separator + "sys" // /sys

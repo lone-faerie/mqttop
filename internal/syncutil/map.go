@@ -8,11 +8,13 @@ import (
 	"github.com/lone-faerie/mqttop/log"
 )
 
+// Map is a wrapper around a map[K]V that is safe for concurrent use by multiple goroutines.
 type Map[K comparable, V any] struct {
 	m map[K]V
 	sync.Mutex
 }
 
+// Make is the concurrency-safe equivalent of make(map[K]V)
 func (m *Map[K, V]) Make() {
 	log.Debug("syncutil.Map lock", "cmd", "Make")
 	m.Lock()
@@ -22,6 +24,7 @@ func (m *Map[K, V]) Make() {
 	log.Debug("syncutil.Map unlock", "cmd", "Make")
 }
 
+// MakeSize is the concurrency-safe equivalent of make(map[K]V, n)
 func (m *Map[K, V]) MakeSize(n int) {
 	log.Debug("syncutil.Map lock", "cmd", "MakeSize", "n", n)
 	m.Lock()
@@ -31,6 +34,7 @@ func (m *Map[K, V]) MakeSize(n int) {
 	log.Debug("syncutil.Map unlock", "cmd", "MakeSize")
 }
 
+// Clear deletes all the entries, resulting in an empty Map.
 func (m *Map[K, V]) Clear() {
 	log.Debug("syncutil.Map lock", "cmd", "Clear")
 	m.Lock()
@@ -40,6 +44,7 @@ func (m *Map[K, V]) Clear() {
 
 }
 
+// Store sets the value for a key.
 func (m *Map[K, V]) Store(k K, v V) {
 	log.Debug("syncutil.Map lock", "cmd", "Store")
 	m.Lock()
@@ -48,6 +53,8 @@ func (m *Map[K, V]) Store(k K, v V) {
 	log.Debug("syncutil.Map unlock", "cmd", "Store")
 }
 
+// Load returns the value stored in the map for a key, or the zero value of V if no
+// value is present. The ok result indicates whether value was found in the map.
 func (m *Map[K, V]) Load(k K) (v V, ok bool) {
 	log.Debug("syncutil.Map lock", "cmd", "Load")
 	m.Lock()
@@ -57,6 +64,8 @@ func (m *Map[K, V]) Load(k K) (v V, ok bool) {
 	return
 }
 
+// Swap swaps the value for a key and returns the previous value if any. The loaded
+// result reports whether the key was present.
 func (m *Map[K, V]) Swap(k K, v V) (old V, ok bool) {
 	log.Debug("syncutil.Map lock", "cmd", "Swap")
 	m.Lock()
@@ -67,6 +76,7 @@ func (m *Map[K, V]) Swap(k K, v V) (old V, ok bool) {
 	return
 }
 
+// Delete deletes the value for a key.
 func (m *Map[K, V]) Delete(k K) {
 	if m == nil {
 		return
@@ -78,6 +88,8 @@ func (m *Map[K, V]) Delete(k K) {
 	log.Debug("syncutil.Map unlock", "cmd", "Delete")
 }
 
+// Iter locks m and returns an iterator over entries of m.
+// Once iteration is complete, m will be unlocked.
 func (m *Map[K, V]) Iter() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		log.Debug("syncutil.Map lock", "cmd", "Iter")

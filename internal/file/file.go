@@ -1,3 +1,5 @@
+// Package file provides an interface for working with files and directories
+// under a root directory.
 package file
 
 import (
@@ -7,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-const Separator = string(os.PathSeparator)
+const Separator = string(os.PathSeparator) // Path separator, most likely "/"
 
 // File wraps an [os.File] with a buffer for convenient line reading.
 type File struct {
@@ -29,7 +31,7 @@ func Open(name string) (*File, error) {
 	return &File{f: f, opened: true}, nil
 }
 
-// Close closes the [File], rendering it unusable for I/O.
+// Close closes the underlying [os.File] of f, rendering it unusable for I/O.
 func (f *File) Close() error {
 	f.opened = false
 	return f.f.Close()

@@ -249,7 +249,8 @@ func (m *Memory) Stop() {
 	m.mu.Unlock()
 }
 
-// String implements [fmt.Stringer]
+// String implements [fmt.Stringer] and returns a string representing the
+// total amount of memory.
 func (m *Memory) String() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -258,7 +259,8 @@ func (m *Memory) String() string {
 	return b.String()
 }
 
-// AppendText implements [encoding/TextAppender]
+// AppendText implements [encoding/TextAppender] and appends the JSON-encoded
+// representation of m to b.
 func (m *Memory) AppendText(b []byte) ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

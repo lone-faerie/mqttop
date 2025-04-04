@@ -1,4 +1,5 @@
 //go:build !debug
+
 package build
 
 import "runtime/debug"

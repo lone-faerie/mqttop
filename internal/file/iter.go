@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 )
 
+// DirNames returns an iterator over names of files in the named directory.
 func DirNames(name string) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		d, err := OpenDir(name)
@@ -25,6 +26,7 @@ func DirNames(name string) iter.Seq[string] {
 	}
 }
 
+// DirPaths returns an iterator over paths of files in the named directory.
 func DirPaths(name string) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		d, err := OpenDir(name)
@@ -45,6 +47,7 @@ func DirPaths(name string) iter.Seq[string] {
 	}
 }
 
+// DirSymlinks returns an iterator over paths of files in the named directory after evaluating symlinks.
 func DirSymlinks(name string) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		d, err := OpenDir(name)
@@ -69,6 +72,7 @@ func DirSymlinks(name string) iter.Seq[string] {
 	}
 }
 
+// Names returns an iterator over names of files in d.
 func (d *Dir) Names() iter.Seq[string] {
 	return func(yield func(string) bool) {
 		names, err := d.ReadNames()
@@ -83,6 +87,7 @@ func (d *Dir) Names() iter.Seq[string] {
 	}
 }
 
+// Paths returns an iterator over paths of files in d.
 func (d *Dir) Paths() iter.Seq[string] {
 	return func(yield func(string) bool) {
 		names, err := d.ReadNames()
@@ -99,6 +104,7 @@ func (d *Dir) Paths() iter.Seq[string] {
 	}
 }
 
+// Symlinks returns an iterator over paths of files in d after evaluating symlinks.
 func (d *Dir) Symlinks() iter.Seq[string] {
 	return func(yield func(string) bool) {
 		names, err := d.ReadNames()
@@ -119,6 +125,8 @@ func (d *Dir) Symlinks() iter.Seq[string] {
 	}
 }
 
+// Lines returns an iterator over the lines of f. The contents of the slice
+// is only valid until the next iteration.
 func (f *File) Lines() iter.Seq[[]byte] {
 	if f.r == nil {
 		f.r = bufio.NewReader(f.f)

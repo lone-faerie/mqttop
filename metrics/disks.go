@@ -49,10 +49,10 @@ type Disks struct {
 	rescanInterval time.Duration
 	rescanTick     *time.Ticker
 
-	mu    sync.RWMutex
-	once  sync.Once
-	stop  context.CancelFunc
-	ch    chan error
+	mu   sync.RWMutex
+	once sync.Once
+	stop context.CancelFunc
+	ch   chan error
 }
 
 func (d *Disks) newDisk(mnt *procfs.Mount, cfg *config.DiskConfig) *Disk {
@@ -272,8 +272,9 @@ func (d *Disks) Update() error {
 }
 
 // Updated returns the channel that updates will be sent on. A received value
-// of [ErrNoChange] indicates there were no changes between updates. Any other non-nil
-// error is the first error encountered during updating and indicates a failed update.
+// of [ErrNoChange] indicates there were no changes between updates and a value of
+// [ErrRescanned] indicates a change from rescanning. Any other non-nil error is the
+// first error encountered during updating and indicates a failed update.
 func (d *Disks) Updated() <-chan error {
 	return d.ch
 }
@@ -288,7 +289,13 @@ func (d *Disks) Stop() {
 	d.mu.Unlock()
 }
 
-// String implements [fmt.Stringer]
+// String implements [fmt.Stringer] and returns a string representing the disks
+// in the form of:
+//
+//	name1 (mnt1)
+//	  size
+//	name2 (mnt2)
+//	  size
 func (d *Disks) String() string {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -308,7 +315,8 @@ func (d *Disks) String() string {
 	return b.String()
 }
 
-// AppendText implements [encoding/TextAppender]
+// AppendText implements [encoding/TextAppender] and appends the JSON-encoded
+// representation of d to b.
 func (d *Disks) AppendText(b []byte) ([]byte, error) {
 	b = append(b, '{')
 	first := true

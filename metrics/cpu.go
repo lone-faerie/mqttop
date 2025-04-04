@@ -450,7 +450,11 @@ func (c *CPU) Stop() {
 	c.mu.Unlock()
 }
 
-// String implements [fmt.Stringer]
+// String implements [fmt.Stringer] and returns a string representing the CPU
+// in the form of:
+//
+//	Name
+//	# cores
 func (c *CPU) String() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -475,7 +479,8 @@ func (c *cpuCore) AppendText(b []byte, flags cpuFlag) []byte {
 	return append(b, '}')
 }
 
-// AppendText implements [encoding/TextAppender]
+// AppendText implements [encoding/TextAppender] and appends the JSON-encoded
+// representation of c to b.
 func (c *CPU) AppendText(b []byte) ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

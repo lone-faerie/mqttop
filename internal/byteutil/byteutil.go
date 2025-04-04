@@ -1,3 +1,4 @@
+// Package byteutil implements functions for the manipulation of byte slices.
 package byteutil
 
 import (

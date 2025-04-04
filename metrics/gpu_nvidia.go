@@ -387,14 +387,15 @@ func (g *NvidiaGPU) Stop() {
 	g.mu.Unlock()
 }
 
-// String implements [fmt.Stringer]
+// String implements [fmt.Stringer] and returns the name of the GPU.
 func (g *NvidiaGPU) String() string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.Name
 }
 
-// AppendText implements [encoding/TextAppender]
+// AppendText implements [encoding/TextAppender] and appends the JSON-encoded
+// representation of g to b.
 func (g *NvidiaGPU) AppendText(b []byte) ([]byte, error) {
 	g.mu.RLock()
 	b = append(b, "{\"name\": \""...)

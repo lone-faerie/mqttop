@@ -18,6 +18,7 @@ const (
 
 var prettyNameKey = []byte("PRETTY_NAME=")
 
+// OSRelease returns the PRETTY_NAME of /etc/os-release.
 func OSRelease() (name string, err error) {
 	f, err := file.Open(osReleasePath)
 	if err != nil {
@@ -41,6 +42,7 @@ func OSRelease() (name string, err error) {
 	return
 }
 
+// MachineID returns the SHA256 sum of the contents of /etc/machine-id.
 func MachineID() ([]byte, error) {
 	id, err := file.ReadBytes(machineIDPath)
 	if err != nil {
@@ -52,6 +54,7 @@ func MachineID() ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
+// Hostname returns the contents of /etc/hostname.
 func Hostname() (string, error) {
 	return file.ReadString(hostnamePath)
 }
