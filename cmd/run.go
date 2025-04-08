@@ -21,9 +21,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/lone-faerie/mqttop"
+	"github.com/lone-faerie/mqttop/bridge"
 	"github.com/lone-faerie/mqttop/config"
+	"github.com/lone-faerie/mqttop/discovery"
 	"github.com/lone-faerie/mqttop/log"
+	"github.com/lone-faerie/mqttop/metrics"
 )
 
 // Flags for [RunCommand]
@@ -237,6 +239,11 @@ func setLogHandler(cfg *config.Config, minLevel log.Level) {
 			w = os.Stderr
 		}
 		log.SetJSONHandler(w)
+	case "text":
+		if w == nil {
+			w = os.Stderr
+		}
+		log.SetTextHandler(w)
 	default:
 		if w != nil {
 			log.SetOutput(w)
@@ -329,6 +336,28 @@ func handlePingbackConn(conn net.Conn, expect []byte) error {
 	return nil
 }
 
+func getDiscovery(mm []metrics.Metric) (d *discovery.Discovery, migrate bool, err error) {
+	if d, err = discovery.New(&cfg.Discovery); err != nil {
+		return
+	}
+	for _, m := range mm {
+		if dd, ok := m.(discovery.Discoverer); ok {
+			dd.Discover(d)
+		}
+	}
+	var old *discovery.Discovery
+	path := filepath.Join(filepath.Dir(ConfigPath[0]), "discovery.json")
+	old, err = discovery.Load(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			err = nil
+		}
+		return
+	}
+	migrate = d.Diff(old)
+	return
+}
+
 func runBridge(cmd *cobra.Command, args []string) error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
@@ -340,34 +369,40 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	bridge := mqttop.New(cfg)
-	if err := bridge.Connect(ctx); err != nil {
+	defer log.Info("Done")
+
+	m := metrics.New(cfg)
+	defer metrics.Stop(m...)
+
+	opts := []bridge.Option{
+		bridge.WithMetrics(m...),
+		bridge.WithLogLevel(cfg.MQTT.LogLevel),
+	}
+	if cfg.Discovery.Enabled {
+		d, migrate, err := getDiscovery(m)
+		if err == nil {
+			opts = append(opts, bridge.WithDiscovery(d, migrate))
+		}
+	}
+
+	b := bridge.New(cfg, opts...)
+	if err := b.Start(ctx); err != nil {
 		log.Error("Not connected.", err)
 		return &ExitError{err, 1}
 	}
 	log.Debug("Connected")
-	defer func() {
-		if bridge.IsConnected() {
-			bridge.Disconnect()
-		}
-		log.Info("Done")
-	}()
 
-	bridge.Start(ctx)
-	log.Debug("Start called")
 	select {
-	case err := <-bridge.Ready():
-		if err != nil {
+	case <-b.Ready():
+		if err := b.Error(); err != nil {
 			return &ExitError{err, 1}
-		}
-		if cfg.Discovery.Enabled {
-			discoveryPath := filepath.Join(filepath.Dir(ConfigPath[0]), "discovery.json")
-			bridge.Discover(ctx, discoveryPath)
 		}
 	case <-ctx.Done():
 		return nil
 	}
 	cfg = nil
+
+	defer b.Stop()
 
 	if pingback, _ := cmd.Flags().GetString("pingback"); pingback != "" {
 		confirmationBytes, err := io.ReadAll(os.Stdin)
@@ -388,7 +423,7 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	select {
 	case <-ctx.Done():
 		log.Debug("Received signal")
-	case <-bridge.Done():
+	case <-b.Done():
 	}
 	return nil
 }

@@ -11,9 +11,9 @@ type Origin struct {
 }
 
 // NewOrigin returns the default Origin with the following values:
-// - Name: "mqttop"
-// - SWVersion: [build.Version()]
-// - SupportURL: "https://github.com/lone-faerie/mqttop"
+//   - Name: "mqttop"
+//   - SWVersion: [build.Version]
+//   - SupportURL: "https://github.com/lone-faerie/mqttop"
 func NewOrigin() *Origin {
 	o := &Origin{
 		Name:       "mqttop",

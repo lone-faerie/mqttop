@@ -136,3 +136,8 @@ func (errorLogger) Printf(format string, v ...any) { defaultLogger.Error(fmt.Spr
 func SetJSONHandler(w io.Writer) {
 	SetHandler(slog.NewJSONHandler(w, nil))
 }
+
+// SetTextHandler sets the default logger's handler to a [slog.TextHandler] with the given writer.
+func SetTextHandler(w io.Writer) {
+	SetHandler(slog.NewTextHandler(w, nil))
+}

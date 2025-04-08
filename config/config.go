@@ -1,9 +1,21 @@
 // Package config provides the structures used for configuration.
+//
+// Configuration can be loaded from multiple YAML files, including from directories.
+// If no config file is specified, the default path(s) will be determined by the first
+// defined value of $MQTTOP_CONFIG_PATH, $XDG_CONFIG_HOME/mqttop.yaml, or $HOME/.config/mqttop.yaml.
+// In the case of $MQTTOP_CONFIG_PATH, the value may be a comma-separated list of paths. If none of
+// these files exist, the default configuration will be used, which looks for the following
+// environment variables:
+//
+//   - broker:   $MQTTOP_BROKER_ADDRESS
+//   - username: $MQTTOP_BROKER_USERNAME
+//   - password: $MQTTOP_BROKER_PASSWORD
 package config
 
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -13,7 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/lone-faerie/mqttop/config/secrets"
-	"github.com/lone-faerie/mqttop/internal/byteutil"
+	"github.com/lone-faerie/mqttop/internal/file"
 	"github.com/lone-faerie/mqttop/log"
 )
 
@@ -27,6 +39,9 @@ type Config struct {
 	// TopicPrefix is the prefix to all default MQTT topics.
 	// If a topic starts with the prefix "mqttop" will have it
 	// replaced with TopicPrefix.
+	//
+	// For example if TopicPrefix is "foo"
+	// "mqttop/bridge/status" becomes "foo/bridge/status"
 	TopicPrefix string `yaml:"topic_prefix"`
 
 	MQTT      MQTTConfig      `yaml:"mqtt,omitempty"`
@@ -45,18 +60,31 @@ func defaultCfg() *Config {
 	return &Config{
 		Interval:    2 * time.Second,
 		TopicPrefix: "mqttop",
-		MQTT:        defaultMQTT,
-		Discovery:   defaultDiscovery,
-		CPU:         defaultCPU,
-		Memory:      defaultMemory,
-		Disks:       defaultDisks,
-		Net:         defaultNet,
-		Battery:     defaultBattery,
-		GPU:         defaultGPU,
+		MQTT:        DefaultMQTT,
+		Discovery:   DefaultDiscovery,
+		CPU:         DefaultCPU,
+		Memory:      DefaultMemory,
+		Disks:       DefaultDisks,
+		Net:         DefaultNet,
+		Battery:     DefaultBattery,
+		GPU:         DefaultGPU,
 	}
 }
 
-// Default returns the default Config when no config file is provided.
+// Default returns the default configuration,
+//
+//	Config{
+//		Interval:    2 * time.Second,
+//		TopicPrefix: "mqttop",
+//		MQTT:        DefaultMQTT,
+//		Discovery:   DefaultDiscovery,
+//		CPU:         DefaultCPU,
+//		Memory:      DefaultMemory,
+//		Disks:       DefaultDisks,
+//		Net:         DefaultNet,
+//		Battery:     DefaultBattery,
+//		GPU:         DefaultGPU,
+//	}
 func Default() *Config {
 	cfg := defaultCfg()
 	cfg.init()
@@ -73,17 +101,40 @@ func Read(r io.Reader) (cfg *Config, err error) {
 	return
 }
 
+func hasNonYAML(filenames []string) bool {
+	for _, name := range filenames {
+		switch filepath.Ext(name) {
+		case "", ".yml", ".yaml":
+		default:
+			return true
+		}
+	}
+	return false
+}
+
 // Load returns the Config parsed from the given yaml files. If the first file does
 // not exist, the default config is returned. If any of the given paths are
-// directories, all the files in the directory are read.
-func Load(file ...string) (cfg *Config, err error) {
-	log.Info("Loading config", "path", file)
-	if _, err = os.Stat(file[0]); err != nil {
+// directories, all the files in the directory are read. If none of the given filenames
+// have an extension, they are assumed to be directories and only files with the
+// extensions ".yml" or ".yaml" will be read.
+func Load(filename ...string) (cfg *Config, err error) {
+	log.Info("Loading config", "path", filename)
+	if len(filename) == 0 {
 		return Default(), nil
 	}
-	r := byteutil.NewMultiFileReader(file...)
+	if _, err = os.Stat(filename[0]); err != nil {
+		return Default(), nil
+	}
+	r := file.NewMultiReader(filename...)
+	if !hasNonYAML(filename) {
+		r.WithExtension(".yml", ".yaml")
+	}
 	defer r.Close()
-	return Read(r)
+	cfg, err = Read(r)
+	if err == io.EOF {
+		err = nil
+	}
+	return
 }
 
 func (cfg *Config) init() (err error) {
@@ -116,9 +167,12 @@ func (cfg *Config) forValue(v reflect.Value, field string) {
 	switch v.Kind() {
 	case reflect.String:
 		s := Expand(v.String())
-		if cfg.TopicPrefix != "mqttop" && slices.Contains(topicFields, field) {
-			if topic, ok := strings.CutPrefix(s, "mqttop/"); ok {
-				s = cfg.TopicPrefix + "/" + topic
+		if s != "" && cfg.TopicPrefix != "" && slices.Contains(topicFields, field) {
+			if s[0] == '~' {
+				s = cfg.TopicPrefix + s[1:]
+			}
+			if s[len(s)-1] == '~' {
+				s = s[:len(s)-1] + cfg.TopicPrefix
 			}
 		}
 		v.SetString(s)
@@ -143,9 +197,9 @@ func (cfg *Config) forValue(v reflect.Value, field string) {
 	}
 }
 
-// Expand replaces ${var} or $var in s according to the values of
-// the current environment variables, and replaces !secret var according
-// to the file at /run/secret/<var>.
+// Expand replaces "!secret var" according to the file at /run/secret/<var>
+// and replaces ${var} or $var in s according to the values of the current
+// environment variables.
 func Expand(s string) string {
 	if secret, ok := secrets.CutPrefix(s); ok {
 		return secrets.MustRead(secret, "")

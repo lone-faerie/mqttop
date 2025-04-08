@@ -1,9 +1,9 @@
 package sysfs
 
 import (
-	"golang.org/x/sys/unix"
-	//	"log"
 	"path/filepath"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/lone-faerie/mqttop/internal/byteutil"
 	"github.com/lone-faerie/mqttop/internal/file"

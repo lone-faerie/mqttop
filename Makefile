@@ -46,6 +46,9 @@ install: clean build ## Build and install binary
 debug: ## Build binary with 'debug' tag
 	go build -tags $(subst $(space),$(comma),$(strip $(GO_BUILD_TAGS) debug)) -ldflags="${LDFLAGS}" -o ${BIN_PATH} ./cmd
 
+cover: ## Build binary for coverage
+	go build -cover ${GO_BUILD_FLAGS} -o ${BIN_PATH} ./cmd
+
 run: ## Build and run binary
 	go run ${GO_BUILD_FLAGS} ./cmd
 

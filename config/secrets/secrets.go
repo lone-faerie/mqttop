@@ -1,3 +1,6 @@
+// Package secrets provides functions for reading Docker secrets.
+//
+// See https://docs.docker.com/compose/how-tos/use-secrets/
 package secrets
 
 import (

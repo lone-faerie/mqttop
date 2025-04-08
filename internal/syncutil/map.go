@@ -1,121 +1,83 @@
 package syncutil
 
 import (
-	"encoding/json"
-	"iter"
+	"fmt"
+	"strconv"
 	"sync"
-
-	"github.com/lone-faerie/mqttop/log"
 )
 
-// Map is a wrapper around a map[K]V that is safe for concurrent use by multiple goroutines.
-type Map[K comparable, V any] struct {
-	m map[K]V
-	sync.Mutex
+type Map[K ~string, V any] struct {
+	sync.Map
 }
 
-// Make is the concurrency-safe equivalent of make(map[K]V)
-func (m *Map[K, V]) Make() {
-	log.Debug("syncutil.Map lock", "cmd", "Make")
-	m.Lock()
-	log.Debug("syscall.Map make", "cmd", "Make")
-	m.m = make(map[K]V)
-	m.Unlock()
-	log.Debug("syncutil.Map unlock", "cmd", "Make")
-}
-
-// MakeSize is the concurrency-safe equivalent of make(map[K]V, n)
-func (m *Map[K, V]) MakeSize(n int) {
-	log.Debug("syncutil.Map lock", "cmd", "MakeSize", "n", n)
-	m.Lock()
-	log.Debug("syscall.Map make", "cmd", "MakeSize", "n", n)
-	m.m = make(map[K]V, n)
-	m.Unlock()
-	log.Debug("syncutil.Map unlock", "cmd", "MakeSize")
-}
-
-// Clear deletes all the entries, resulting in an empty Map.
-func (m *Map[K, V]) Clear() {
-	log.Debug("syncutil.Map lock", "cmd", "Clear")
-	m.Lock()
-	clear(m.m)
-	m.Unlock()
-	log.Debug("syncutil.Map unlock", "cmd", "Clear")
-
-}
-
-// Store sets the value for a key.
-func (m *Map[K, V]) Store(k K, v V) {
-	log.Debug("syncutil.Map lock", "cmd", "Store")
-	m.Lock()
-	m.m[k] = v
-	m.Unlock()
-	log.Debug("syncutil.Map unlock", "cmd", "Store")
-}
-
-// Load returns the value stored in the map for a key, or the zero value of V if no
-// value is present. The ok result indicates whether value was found in the map.
-func (m *Map[K, V]) Load(k K) (v V, ok bool) {
-	log.Debug("syncutil.Map lock", "cmd", "Load")
-	m.Lock()
-	v, ok = m.m[k]
-	m.Unlock()
-	log.Debug("syncutil.Map unlock", "cmd", "Load")
+func (m *Map[K, V]) Load(key K) (value V, ok bool) {
+	v, ok := m.Map.Load(key)
+	if ok {
+		value = v.(V)
+	}
 	return
 }
 
-// Swap swaps the value for a key and returns the previous value if any. The loaded
-// result reports whether the key was present.
-func (m *Map[K, V]) Swap(k K, v V) (old V, ok bool) {
-	log.Debug("syncutil.Map lock", "cmd", "Swap")
-	m.Lock()
-	old, ok = m.m[k]
-	m.m[k] = v
-	m.Unlock()
-	log.Debug("syncutil.Map unlock", "cmd", "Swap")
+func (m *Map[K, V]) LoadAndDelete(key K) (value V, loaded bool) {
+	v, loaded := m.Map.LoadAndDelete(key)
+	if loaded {
+		value = v.(V)
+	}
 	return
 }
 
-// Delete deletes the value for a key.
-func (m *Map[K, V]) Delete(k K) {
-	if m == nil {
-		return
+func (m *Map[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
+	v, loaded := m.Map.LoadOrStore(key, value)
+	if loaded {
+		actual = v.(V)
+	} else {
+		actual = value
 	}
-	log.Debug("syncutil.Map lock", "cmd", "Delete")
-	m.Lock()
-	delete(m.m, k)
-	m.Unlock()
-	log.Debug("syncutil.Map unlock", "cmd", "Delete")
+	return
 }
 
-// Iter locks m and returns an iterator over entries of m.
-// Once iteration is complete, m will be unlocked.
-func (m *Map[K, V]) Iter() iter.Seq2[K, V] {
-	return func(yield func(K, V) bool) {
-		log.Debug("syncutil.Map lock", "cmd", "Iter")
-		m.Lock()
-		defer log.Debug("syncutil.Map unlock", "cmd", "Iter")
-		defer m.Unlock()
-		for k, v := range m.m {
-			if !yield(k, v) {
-				return
-			}
-		}
+func (m *Map[K, V]) Range(f func(key K, value V) bool) {
+	m.Map.Range(f)
+}
+
+func (m *Map[K, V]) Swap(key K, value V) (previous V, loaded bool) {
+	v, loaded := m.Map.Swap(key, value)
+	if loaded {
+		previous = v.(V)
 	}
+	return
 }
 
 func (m *Map[K, V]) MarshalJSON() ([]byte, error) {
-	log.Debug("syncutil.Map lock", "cmd", "MarshalJSON")
-	m.Lock()
-	defer log.Debug("syncutil.Map unlock", "cmd", "MarshalJSON")
-	defer m.Unlock()
-	return json.Marshal(m.m)
-}
-
-func (m *Map[K, V]) UnmarshalJSON(b []byte) error {
-	log.Debug("syncutil.Map lock", "cmd", "UnmarshalJSON")
-	m.Lock()
-	defer log.Debug("syncutil.Map unlock", "cmd", "UnmarshalJSON")
-	defer m.Unlock()
-	return json.Unmarshal(b, &m.m)
+	if m == nil {
+		return []byte("null"), nil
+	}
+	b := []byte{'{'}
+	first := true
+	m.Range(func(key K, value any) bool {
+		if !first {
+			b = append(b, ',')
+		}
+		b = strconv.AppendQuote(b, string(key))
+		b = append(b, ':')
+		switch v := value.(type) {
+		case string:
+			b = strconv.AppendQuote(b, v)
+		case bool:
+			b = strconv.AppendBool(b, v)
+		case uint, uint8, uint16, uint32, uint64:
+			b = strconv.AppendUint(b, v, 10)
+		case int, int8, int16, int32, int64:
+			b = strconv.AppendInt(b, v, 10)
+		case float32:
+			b = strconv.AppendFloat(b, v, 'f', -1, 32)
+		case float64:
+			b = strconv.AppendFloat(b, v, 'f', -1, 64)
+		default:
+			fmt.Append(b, value)
+		}
+		return true
+	})
+	b = append(b, '}')
+	return b, nil
 }

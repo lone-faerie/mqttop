@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	//	"sync/atomic"
 	"time"
 
 	"github.com/lone-faerie/mqttop/config"

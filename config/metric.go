@@ -254,55 +254,54 @@ type GPUConfig struct {
 	SizeUnit string `yaml:"size_unit,omitempty"`
 	// IncludeProcs indicates if the usage of individual processes should
 	// be included in the metrics.
-	// TODO(lone-faerie): not yet implemented
+	// TODO: not yet implemented
 	IncludeProcs bool `yaml:"include_proc"`
 
 	nameTemplate *template.Template
 }
 
-var defaultCPU = CPUConfig{
+var DefaultCPU = CPUConfig{
 	MetricConfig: MetricConfig{
 		Enabled: true,
-		Topic:   "mqttop/metric/cpu",
+		Topic:   "~/metric/cpu",
 	},
 }
 
-var defaultMemory = MemoryConfig{
+var DefaultMemory = MemoryConfig{
 	MetricConfig: MetricConfig{
 		Enabled: true,
-		Topic:   "mqttop/metric/memory",
+		Topic:   "~/metric/memory",
 	},
 	IncludeSwap: true,
 }
 
-var defaultDisks = DisksConfig{
+var DefaultDisks = DisksConfig{
 	MetricConfig: MetricConfig{
 		Enabled: true,
-		Topic:   "mqttop/metric/disk",
+		Topic:   "~/metric/disk",
 	},
 	UseFSTab: true,
 	ShowIO:   true,
 }
 
-var defaultNet = NetConfig{
+var DefaultNet = NetConfig{
 	MetricConfig: MetricConfig{
 		Enabled: true,
-		Topic:   "mqttop/metric/net",
-	},
-	// OnlyPhysical: true,
-}
-
-var defaultBattery = BatteryConfig{
-	MetricConfig: MetricConfig{
-		Enabled: true,
-		Topic:   "mqttop/metric/battery",
+		Topic:   "~/metric/net",
 	},
 }
 
-var defaultGPU = GPUConfig{
+var DefaultBattery = BatteryConfig{
 	MetricConfig: MetricConfig{
 		Enabled: true,
-		Topic:   "mqttop/metric/gpu",
+		Topic:   "~/metric/battery",
+	},
+}
+
+var DefaultGPU = GPUConfig{
+	MetricConfig: MetricConfig{
+		Enabled: true,
+		Topic:   "~/metric/gpu",
 	},
 }
 
@@ -516,43 +515,43 @@ func (cfg *GPUConfig) FormatName(name string) string {
 	return b.String()
 }
 
-// IsZero returns true if cfg is the default value.
+// IsZero indicates whether cfg is the default value.
 func (cfg CPUConfig) IsZero() bool {
-	return cfg == defaultCPU
+	return cfg == DefaultCPU
 }
 
-// IsZero returns true if cfg is the default value.
+// IsZero indicates whether cfg is the default value.
 func (cfg MemoryConfig) IsZero() bool {
-	return cfg == defaultMemory
+	return cfg == DefaultMemory
 }
 
-// IsZero returns true if cfg is the default value.
+// IsZero indicates whether cfg is the default value.
 func (cfg DisksConfig) IsZero() bool {
-	return cfg.MetricConfig == defaultDisks.MetricConfig &&
-		cfg.UseFSTab == defaultDisks.UseFSTab &&
-		cfg.Rescan == defaultDisks.Rescan &&
-		cfg.ShowIO == defaultDisks.ShowIO &&
+	return cfg.MetricConfig == DefaultDisks.MetricConfig &&
+		cfg.UseFSTab == DefaultDisks.UseFSTab &&
+		cfg.Rescan == DefaultDisks.Rescan &&
+		cfg.ShowIO == DefaultDisks.ShowIO &&
 		len(cfg.Disk) == 0
 }
 
-// IsZero returns true if cfg is the default value.
+// IsZero indicates whether cfg is the default value.
 func (cfg NetConfig) IsZero() bool {
-	return cfg.MetricConfig == defaultNet.MetricConfig &&
-		cfg.OnlyPhysical == defaultNet.OnlyPhysical &&
-		cfg.OnlyRunning == defaultNet.OnlyRunning &&
-		cfg.IncludeBridge == defaultNet.IncludeBridge &&
-		cfg.Rescan == defaultNet.Rescan &&
-		cfg.RateUnit == defaultNet.RateUnit &&
+	return cfg.MetricConfig == DefaultNet.MetricConfig &&
+		cfg.OnlyPhysical == DefaultNet.OnlyPhysical &&
+		cfg.OnlyRunning == DefaultNet.OnlyRunning &&
+		cfg.IncludeBridge == DefaultNet.IncludeBridge &&
+		cfg.Rescan == DefaultNet.Rescan &&
+		cfg.RateUnit == DefaultNet.RateUnit &&
 		len(cfg.Include) == 0 &&
 		len(cfg.Exclude) == 0
 }
 
-// IsZero returns true if cfg is the default value.
+// IsZero indicates whether cfg is the default value.
 func (cfg BatteryConfig) IsZero() bool {
-	return cfg == defaultBattery
+	return cfg == DefaultBattery
 }
 
-// IsZero returns true if cfg is the default value.
+// IsZero indicates whether cfg is the default value.
 func (cfg GPUConfig) IsZero() bool {
-	return cfg == defaultGPU
+	return cfg == DefaultGPU
 }

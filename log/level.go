@@ -52,7 +52,7 @@ const (
 //
 //	LevelWarn.String() => "WARN"
 func (l Level) String() string {
-	if l == LevelDisabled {
+	if l >= LevelDisabled {
 		return "DISABLED"
 	}
 	return slog.Level(l).String()
@@ -116,3 +116,26 @@ func (l *Level) UnmarshalText(data []byte) (err error) {
 // Level returns the receiver.
 // It implements [slog.Leveler].
 func (l Level) Level() Level { return l }
+
+// LevelFlag implements the interfaces needed to be used as a command-line flag.
+type LevelFlag Level
+
+func (lf *LevelFlag) String() string {
+	return (Level)(*lf).String()
+}
+
+func (lf *LevelFlag) Set(s string) error {
+	return lf.UnmarshalText([]byte(s))
+}
+
+func (lf *LevelFlag) Get() any {
+	return (Level)(*lf)
+}
+
+func (lf *LevelFlag) Type() string {
+	return "level"
+}
+
+func (lf *LevelFlag) UnmarshalText(b []byte) error {
+	return (*Level)(lf).UnmarshalText(b)
+}

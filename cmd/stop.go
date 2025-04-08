@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/spf13/cobra"
 
 	"github.com/lone-faerie/mqttop/config"

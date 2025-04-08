@@ -1,6 +1,10 @@
 package byteutil
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+	"unsafe"
+)
 
 func TestBtou(t *testing.T) {
 	var tests = []struct {
@@ -96,6 +100,56 @@ func TestColumn(t *testing.T) {
 		col, rest := Column(tt.b)
 		if string(col) != tt.col || string(rest) != tt.rest {
 			t.Errorf("%s: Wanted col=%s, rest=%s, got col=%s, rest=%s", tt.b, tt.col, tt.rest, col, rest)
+		}
+	}
+}
+
+func TestToLower(t *testing.T) {
+	var tests = []struct {
+		b    []byte
+		want []byte
+	}{
+		{[]byte("Hello, world!"), []byte("hello, world!")},
+		{[]byte("hello, world!"), []byte("hello, world!")},
+	}
+	for _, tt := range tests {
+		lower := ToLower(tt.b)
+		if !bytes.Equal(lower, tt.want) || unsafe.SliceData(tt.b) != unsafe.SliceData(lower) {
+			t.Errorf("%s: Wanted %s, got %s", tt.b, tt.want, lower)
+		}
+	}
+}
+
+func TestTrimByte(t *testing.T) {
+	var tests = []struct {
+		b    []byte
+		c    byte
+		want []byte
+	}{
+		{[]byte("  foo bar  "), ' ', []byte("foo bar")},
+		{[]byte("    "), ' ', []byte{}},
+		{[]byte("foo bar"), ' ', []byte("foo bar")},
+	}
+	for _, tt := range tests {
+		trim := TrimByte(tt.b, tt.c)
+		if !bytes.Equal(trim, tt.want) {
+			t.Errorf("%s: Wanted %s, got %s", tt.b, tt.want, trim)
+		}
+	}
+}
+
+func TestToTitle(t *testing.T) {
+	var tests = []struct {
+		b    []byte
+		want []byte
+	}{
+		{[]byte("hello, world!"), []byte("Hello, World!")},
+		{[]byte("123 abc"), []byte("123 Abc")},
+	}
+	for _, tt := range tests {
+		title := ToTitle(tt.b)
+		if !bytes.Equal(title, tt.want) {
+			t.Errorf("%s: Wanted %s, got %s", tt.b, tt.want, title)
 		}
 	}
 }

@@ -208,7 +208,6 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 			changed = true
 		}
 	}
-	log.Debug("", "interfaces", n.interfaces)
 	if !changed {
 		return ErrNoChange
 	}
@@ -369,7 +368,6 @@ func (n *Net) AppendText(b []byte) ([]byte, error) {
 	first := true
 	for name, iface := range n.interfaces {
 		if n.cfg.OnlyRunning && !iface.Running() {
-			log.Debug("AppendText", name, "not running")
 			continue
 		}
 		if !first {
@@ -417,10 +415,9 @@ func (n *Net) MarshalJSON() ([]byte, error) {
 // error will not be sent on the channel returned by [Net.Updated] unlike
 // updates that happen automatically every update interval.
 func (iface *NetInterface) Update() error {
-	defer log.Debug("Done updating interface", "name", iface.Name)
 	rx, tx, err := sysfs.NetStatistics(iface.Name)
 	if err != nil {
-		return &os.PathError{"open", iface.Name, err}
+		return &os.PathError{Op: "open", Path: iface.Name, Err: err}
 	}
 	now := time.Now()
 	iface.Download = rx - iface.lastRx

@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"time"
 
-	"github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/lone-faerie/mqttop/log"
 )
 
@@ -105,21 +105,21 @@ type DiscoveryConfig struct {
 	WaitPayload string `yaml:"wait_payload"`
 }
 
-var defaultMQTT = MQTTConfig{
+var DefaultMQTT = MQTTConfig{
 	Broker:           "$MQTTOP_BROKER_ADDRESS",
 	Username:         "$MQTTOP_BROKER_USERNAME",
 	Password:         "$MQTTOP_BROKER_PASSWORD",
 	BirthWillEnabled: true,
-	BirthWillTopic:   "mqttop/bridge/status",
+	BirthWillTopic:   "~/bridge/status",
 	LogLevel:         log.LevelDisabled,
 }
 
-var defaultDiscovery = DiscoveryConfig{
+var DefaultDiscovery = DiscoveryConfig{
 	Enabled:      true,
 	Prefix:       "homeassistant",
 	Method:       "device",
-	Availability: "mqttop/bridge/status",
-	Retained:     true,
+	Availability: "~/bridge/status",
+	Retained:     false,
 }
 
 // ClientOptions returns cfg formatted as [mqtt.ClientOptions] to provide to
@@ -167,12 +167,12 @@ func (cfg *MQTTConfig) getCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate,
 	return cfg.tlsCert, nil
 }
 
-// IsZero returns true if cfg is the default value.
+// IsZero indicates whether cfg is the default value.
 func (cfg MQTTConfig) IsZero() bool {
-	return cfg == defaultMQTT
+	return cfg == DefaultMQTT
 }
 
-// IsZero returns true if cfg is the default value.
+// IsZero indicates whether cfg is the default value.
 func (cfg DiscoveryConfig) IsZero() bool {
-	return cfg == defaultDiscovery
+	return cfg == DefaultDiscovery
 }

@@ -2,8 +2,9 @@ package file
 
 import (
 	"bytes"
-	"golang.org/x/sys/unix"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/lone-faerie/mqttop/internal/byteutil"
 )

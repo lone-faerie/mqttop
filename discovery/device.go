@@ -10,6 +10,12 @@ import (
 	"github.com/lone-faerie/mqttop/sysfs"
 )
 
+// Connection is a tuple of the form [connnection_type, connection_identifier] used for
+// the device mapping of the discovery payload.
+//
+// For example the MAC address of a network interface:
+//
+//	Connection{"mac", "02:5b:26:a8:dc:12"}
 type Connection [2]string
 
 // Device implements the device mapping for the discovery payload. This ties components

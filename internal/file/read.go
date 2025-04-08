@@ -3,7 +3,6 @@ package file
 import (
 	"io"
 	"os"
-	//	"log"
 
 	"github.com/lone-faerie/mqttop/log"
 )

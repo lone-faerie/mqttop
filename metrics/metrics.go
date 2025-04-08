@@ -105,6 +105,9 @@ func SetInterval(d time.Duration, m ...Metric) {
 func Start(ctx context.Context, m ...Metric) error {
 	var e, err error
 	for _, mm := range m {
+		if mm == nil {
+			continue
+		}
 		if e = mm.Start(ctx); e != nil && err == nil {
 			err = e
 		}
@@ -116,6 +119,9 @@ func Start(ctx context.Context, m ...Metric) error {
 // not be restarted after stopping.
 func Stop(m ...Metric) {
 	for _, mm := range m {
+		if mm == nil {
+			continue
+		}
 		mm.Stop()
 	}
 }

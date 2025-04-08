@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 func (d *Discovery) removeComponents(ctx context.Context, c mqtt.Client, components ...string) error {
@@ -14,10 +14,7 @@ func (d *Discovery) removeComponents(ctx context.Context, c mqtt.Client, compone
 			continue
 		}
 		platform := cmp[Platform].(string)
-		topic, err := d.Topic(d.cfg.Prefix, platform, d.NodeID, name)
-		if err != nil {
-			return err
-		}
+		topic := d.Topic(d.cfg.Prefix, platform, d.NodeID, name)
 		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
 		select {
 		case <-ctx.Done():
@@ -36,10 +33,7 @@ func (d *Discovery) removeDevice(ctx context.Context, c mqtt.Client) error {
 }
 
 func (d *Discovery) removeDeviceNode(ctx context.Context, c mqtt.Client, nodeID string) error {
-	topic, err := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
-	if err != nil {
-		return err
-	}
+	topic := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
 	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, []byte{})
 	select {
 	case <-ctx.Done():
@@ -61,10 +55,7 @@ func (d *Discovery) Migrate(ctx context.Context, c mqtt.Client) error {
 func (d *Discovery) migrate(ctx context.Context, c mqtt.Client, nodeID string) error {
 	for name, cmp := range d.Components {
 		platform := cmp[Platform].(string)
-		topic, err := d.Topic(d.cfg.Prefix, platform, nodeID, name)
-		if err != nil {
-			return err
-		}
+		topic := d.Topic(d.cfg.Prefix, platform, nodeID, name)
 		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, migratePayload)
 		select {
 		case <-ctx.Done():
@@ -86,10 +77,7 @@ func (d *Discovery) Rollback(ctx context.Context, c mqtt.Client) error {
 }
 
 func (d *Discovery) rollback(ctx context.Context, c mqtt.Client, nodeID string) error {
-	topic, err := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
-	if err != nil {
-		return err
-	}
+	topic := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
 	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, migratePayload)
 	select {
 	case <-ctx.Done():

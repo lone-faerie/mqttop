@@ -1,10 +1,11 @@
 package file
 
 import (
-	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 var (

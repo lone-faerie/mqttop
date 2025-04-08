@@ -136,10 +136,10 @@ func Columns(b []byte, dst ...*[]byte) (n int, rest []byte) {
 	}
 	return
 }
-
-// Equal is equivalent to [bytes.Compare](a, b) == 0.
+ 
+// Equal returns [bytes.Equal](a, b)
 func Equal(a, b []byte) bool {
-	return bytes.Compare(a, b) == 0
+	return bytes.Equal(a, b)
 }
 
 // ToLower is equivalent to [bytes.ToLower] but modifies

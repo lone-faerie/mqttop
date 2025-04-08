@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/log"
@@ -21,17 +21,29 @@ import (
 
 // Home Assistant entity platforms
 const (
-	BinarySensor = "binary_sensor"
-	Button       = "button"
-	Sensor       = "sensor"
-	Switch       = "switch"
+	BinarySensor = "binary_sensor" // https://www.home-assistant.io/integrations/binary_sensor.mqtt/
+	Button       = "button"        // https://www.home-assistant.io/integrations/button.mqtt/
+	Sensor       = "sensor"        // https://www.home-assistant.io/integrations/sensor.mqtt/
+	Switch       = "switch"        // https://www.home-assistant.io/integrations/switch.mqtt/
 )
 
 // Home Assitant entity categories
 const (
+	Config     = "config"
 	Diagnostic = "diagnostic"
 )
 
+// Component is the mapping of specific options for each MQTT component (i.e. entity).
+//
+// For example a temperature sensor:
+//
+//	Component{
+//		Platform: Sensor,
+//		DeviceClass: "temperature",
+//		UnitOfMeasurement: "°C",
+//		ValueTemplate: "{{ value_json.temperature}}",
+//		UniqueID: "temp01ae_t",
+//	}
 type Component map[Option]any
 
 // Discoverer is the interface that is implemented by a value to add it to the discovery
@@ -59,11 +71,12 @@ type Discovery struct {
 func Load(path string) (*Discovery, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		log.Debug("Err is not exist", "result", errors.Is(err, os.ErrNotExist))
 	}
 	defer f.Close()
 	d := &Discovery{}
 	if err := json.NewDecoder(f).Decode(d); err != nil {
+		log.Error("Unable to decode discovery", err)
 		return nil, err
 	}
 	return d, nil
@@ -116,7 +129,7 @@ func New(cfg *config.DiscoveryConfig) (*Discovery, error) {
 }
 
 // Topic returns the topic to publish the discovery payload to using the provided prefix.
-func (d *Discovery) Topic(prefix, component, nodeID, objectID string) (string, error) {
+func (d *Discovery) Topic(prefix, component, nodeID, objectID string) string {
 	if objectID == "" {
 		objectID = d.ObjectID
 	}
@@ -126,7 +139,7 @@ func (d *Discovery) Topic(prefix, component, nodeID, objectID string) (string, e
 	} else {
 		elems = []string{prefix, component, objectID, "config"}
 	}
-	return strings.Join(elems, "/"), nil
+	return strings.Join(elems, "/")
 }
 
 // SetAvailability sets the availability of all components to the one provided.
@@ -208,10 +221,7 @@ func (d *Discovery) publishDeviceNode(ctx context.Context, c mqtt.Client, nodeID
 	if err != nil {
 		return err
 	}
-	topic, err := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
-	if err != nil {
-		return err
-	}
+	topic := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
 	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
 	select {
 	case <-ctx.Done():
@@ -255,10 +265,7 @@ func (d *Discovery) publishComponents(ctx context.Context, c mqtt.Client, migrat
 			delete(cmp, optOrigin)
 			delete(cmp, optDevice)
 		}
-		topic, err := d.Topic(d.cfg.Prefix, platform, d.NodeID, name)
-		if err != nil {
-			return err
-		}
+		topic := d.Topic(d.cfg.Prefix, platform, d.NodeID, name)
 		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
 		select {
 		case <-ctx.Done():
@@ -320,14 +327,6 @@ func (d *Discovery) publishNodes(ctx context.Context, c mqtt.Client, migrate boo
 // either from a device discovery to individual component discoveries, or from individual component
 // discoveries to a device discovery.
 func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool, args ...string) (err error) {
-	if err = d.Wait(ctx, c); err != nil {
-		return err
-	}
-	select {
-	case <-ctx.Done():
-		return nil
-	default:
-	}
 	method := d.Method
 	d.Method = ""
 	defer func() {
@@ -348,6 +347,20 @@ func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool, ar
 		log.Error("Unsuccessful discovery", err)
 	}
 	return
+}
+
+func (d *Discovery) Subscribe(ctx context.Context, c mqtt.Client) error {
+	t := c.Subscribe(d.cfg.WaitTopic, 0, func(_ mqtt.Client, msg mqtt.Message) {
+		if d.cfg.WaitPayload == "" || string(msg.Payload()) == d.cfg.WaitPayload {
+			go d.Publish(ctx, c, false)
+		}
+	})
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-t.Done():
+	}
+	return t.Error()
 }
 
 func shouldMigrate(method, old string) bool {

@@ -2,17 +2,16 @@ package mqttop
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/discovery"
-	//	"github.com/lone-faerie/mqttop/internal/syncutil"
 	"github.com/lone-faerie/mqttop/log"
 	"github.com/lone-faerie/mqttop/metrics"
 )
@@ -77,6 +76,10 @@ func NewWithClient(cfg *config.Config, c mqtt.Client) *Bridge {
 	}
 }
 
+func (b *Bridge) AddMetric(m ...metrics.Metric) {
+	b.m = append(b.m, m...)
+}
+
 func waitToken(ctx context.Context, t mqtt.Token) error {
 	select {
 	case <-ctx.Done():
@@ -119,6 +122,8 @@ func (b *Bridge) updateStatus(ctx context.Context, m metrics.Metric, state bool)
 	return
 }
 
+var statusBuf []byte
+
 func (b *Bridge) publishStatus(ctx context.Context, lwt bool) (err error) {
 	var (
 		data []byte
@@ -130,22 +135,29 @@ func (b *Bridge) publishStatus(ctx context.Context, lwt bool) (err error) {
 	if lwt {
 		data = opts.WillPayload()
 	} else {
-		states := make(map[string]bool)
+		data = []byte{'{'}
+		first := true
 		b.states.Range(func(k, v any) bool {
-			states[k.(string)] = v.(bool)
+			if !first {
+				data = append(data, ',')
+			}
+			data = strconv.AppendQuote(data, k.(string))
+			data = append(data, ':')
+			data = strconv.AppendBool(data, v.(bool))
+			first = false
 			return true
 		})
-		data, err = json.Marshal(states)
-		if err != nil {
-			return
-		}
+		data = append(data, '}')
 	}
 	t := b.client.Publish(opts.WillTopic(), opts.WillQos(), opts.WillRetained(), data)
 	return waitToken(ctx, t)
 }
 
 func (b *Bridge) publishUpdates(ctx context.Context) {
-	var done <-chan struct{}
+	var (
+		t    mqtt.Token
+		done <-chan struct{}
+	)
 	for {
 		select {
 		case <-ctx.Done():
@@ -155,9 +167,12 @@ func (b *Bridge) publishUpdates(ctx context.Context) {
 				return
 			}
 			data, _ := m.AppendText(nil)
-			t := b.client.Publish(m.Topic(), 0, false, data)
+			t = b.client.Publish(m.Topic(), 0, false, data)
 			done = t.Done()
 		case <-done:
+			if err := t.Error(); err != nil {
+				log.Error("Unable to publish update", err)
+			}
 			done = nil
 		}
 	}
@@ -325,18 +340,23 @@ func (b *Bridge) Disconnect() {
 		log.WarnError("Unable to publish LWT on graceful disconnect", err)
 	}
 	b.client.Disconnect(500)
-	if b.ready != nil {
-		<-b.ready
+	defer func() {
+		time.Sleep(time.Second)
+		log.Info("Disconnected")
+		if b.done != nil {
+			close(b.done)
+		}
+	}()
+	if b.ready == nil {
+		return
 	}
+	<-b.ready
 	b.cancel()
 	b.wg.Wait()
 	close(b.updates)
 	if b.rediscover != nil {
 		close(b.rediscover)
 	}
-	time.Sleep(time.Second)
-	log.Info("Disconnected")
-	close(b.done)
 }
 
 // Discover publishes the discovery payload(s) for Home Assistant MQTT discovery after
