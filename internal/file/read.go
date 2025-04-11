@@ -9,12 +9,13 @@ import (
 
 // Read reads the named file and returns the contents.
 func Read(name string) ([]byte, error) {
-	const maxBufferSize = 1024 * 1024
 	f, err := open(name)
 	if err != nil {
 		return nil, err
 	}
+
 	defer f.Close()
+
 	return io.ReadAll(f)
 }
 
@@ -24,6 +25,7 @@ func ReadDir(name string) ([]os.DirEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return os.ReadDir(name)
 }
 
@@ -31,11 +33,14 @@ func ReadDir(name string) ([]os.DirEntry, error) {
 // in the directory.
 func ReadDirNames(name string) ([]string, error) {
 	log.Debug("ReadDirNames", "name", name)
+
 	d, err := OpenDir(name)
 	if err != nil {
 		return nil, err
 	}
+
 	defer d.Close()
+
 	return d.ReadNames()
 }
 
@@ -46,7 +51,9 @@ func ReadDirPaths(name string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer d.Close()
+
 	return d.ReadPaths()
 }
 
@@ -57,6 +64,8 @@ func ReadDirSymlinks(name string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer d.Close()
+
 	return d.ReadSymlinks()
 }

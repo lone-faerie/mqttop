@@ -36,13 +36,15 @@ type Config struct {
 	// Interval is the default update interval for all enabled metrics.
 	// Any metric with an update interval of 0 will use Interval instead.
 	Interval time.Duration `yaml:"interval"`
-	// TopicPrefix is the prefix to all default MQTT topics.
-	// If a topic starts with the prefix "mqttop" will have it
-	// replaced with TopicPrefix.
+	// BaseTopic is a value that may be used multiple times in configuration.
+	// If the options "birth_lwt_topic" for MQTT configuration, "availability"
+	// for discovery configuration, or "topic" for any metric configuration
+	// have the prefix or suffix of "~" then that "~" will be replaced with
+	// BaseTopic. The default value is "mqttop".
 	//
-	// For example if TopicPrefix is "foo"
-	// "mqttop/bridge/status" becomes "foo/bridge/status"
-	TopicPrefix string `yaml:"topic_prefix"`
+	// For example if BaseTopic is "foo" then
+	// "~/bridge/status" becomes "foo/bridge/status"
+	BaseTopic string `yaml:"base_topic"`
 
 	MQTT      MQTTConfig      `yaml:"mqtt,omitempty"`
 	Discovery DiscoveryConfig `yaml:"discovery,omitempty"`
@@ -58,16 +60,16 @@ type Config struct {
 
 func defaultCfg() *Config {
 	return &Config{
-		Interval:    2 * time.Second,
-		TopicPrefix: "mqttop",
-		MQTT:        DefaultMQTT,
-		Discovery:   DefaultDiscovery,
-		CPU:         DefaultCPU,
-		Memory:      DefaultMemory,
-		Disks:       DefaultDisks,
-		Net:         DefaultNet,
-		Battery:     DefaultBattery,
-		GPU:         DefaultGPU,
+		Interval:  2 * time.Second,
+		BaseTopic: "mqttop",
+		MQTT:      DefaultMQTT,
+		Discovery: DefaultDiscovery,
+		CPU:       DefaultCPU,
+		Memory:    DefaultMemory,
+		Disks:     DefaultDisks,
+		Net:       DefaultNet,
+		Battery:   DefaultBattery,
+		GPU:       DefaultGPU,
 	}
 }
 
@@ -88,6 +90,7 @@ func defaultCfg() *Config {
 func Default() *Config {
 	cfg := defaultCfg()
 	cfg.init()
+
 	return cfg
 }
 
@@ -97,7 +100,9 @@ func Read(r io.Reader) (cfg *Config, err error) {
 	if err = yaml.NewDecoder(r).Decode(cfg); err != nil {
 		return
 	}
+
 	err = cfg.init()
+
 	return
 }
 
@@ -109,6 +114,7 @@ func hasNonYAML(filenames []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -119,43 +125,62 @@ func hasNonYAML(filenames []string) bool {
 // extensions ".yml" or ".yaml" will be read.
 func Load(filename ...string) (cfg *Config, err error) {
 	log.Info("Loading config", "path", filename)
+
 	if len(filename) == 0 {
 		return Default(), nil
 	}
+
 	if _, err = os.Stat(filename[0]); err != nil {
 		return Default(), nil
 	}
+
 	r := file.NewMultiReader(filename...)
 	if !hasNonYAML(filename) {
 		r.WithExtension(".yml", ".yaml")
 	}
+
 	defer r.Close()
 	cfg, err = Read(r)
+
 	if err == io.EOF {
 		err = nil
 	}
+
 	return
 }
 
-func (cfg *Config) init() (err error) {
-	cfg.TopicPrefix = strings.TrimRight(cfg.TopicPrefix, "/")
-	if cfg.TopicPrefix != "mqttop" {
-		log.Debug("Replacing topic prefix", "old", "mqttop", "new", cfg.TopicPrefix)
-		if s, ok := strings.CutPrefix(cfg.MQTT.BirthWillTopic, "mqttop/"); ok {
-			cfg.MQTT.BirthWillTopic = cfg.TopicPrefix + "/" + s
-		}
-		if s, ok := strings.CutPrefix(cfg.Discovery.Availability, "mqttop/"); ok {
-			cfg.Discovery.Availability = cfg.TopicPrefix + "/" + s
-		}
+// ReplaceBase returns topic with the prefix and/or suffix "~" replaced with base.
+// ReplaceBase returns topic, and if topic is not prefixed or suffixed with "~" or
+// if either topic or base are an empty string.
+func ReplaceBase(base, topic string) string {
+	if topic == "" || base == "" {
+		return topic
 	}
+	if topic[0] == '~' {
+		topic = base + topic[1:]
+	}
+	if topic[len(topic)-1] == '~' {
+		topic = topic[:len(topic)-1] + base
+	}
+	return topic
+}
+
+func (cfg *Config) init() (err error) {
+	if cfg.BaseTopic != "" {
+		log.Debug("Replacing base topic", "old", "~", "new", cfg.BaseTopic)
+
+		cfg.MQTT.BirthWillTopic = ReplaceBase(cfg.BaseTopic, cfg.MQTT.BirthWillTopic)
+		cfg.Discovery.Availability = ReplaceBase(cfg.BaseTopic, cfg.Discovery.Availability)
+	}
+
 	var (
 		v = reflect.ValueOf(cfg).Elem()
 		n = v.NumField()
 	)
-	//	expandValue(v)
 	for i := 0; i < n; i++ {
 		cfg.forValue(v.Field(i), "")
 	}
+
 	return
 }
 
@@ -167,22 +192,20 @@ func (cfg *Config) forValue(v reflect.Value, field string) {
 	switch v.Kind() {
 	case reflect.String:
 		s := Expand(v.String())
-		if s != "" && cfg.TopicPrefix != "" && slices.Contains(topicFields, field) {
-			if s[0] == '~' {
-				s = cfg.TopicPrefix + s[1:]
-			}
-			if s[len(s)-1] == '~' {
-				s = s[:len(s)-1] + cfg.TopicPrefix
-			}
+		if s != "" && cfg.BaseTopic != "" && slices.Contains(topicFields, field) {
+			s = ReplaceBase(cfg.BaseTopic, s)
 		}
+
 		v.SetString(s)
 	case reflect.Struct:
 		iface := v.Addr().Interface()
 		if l, ok := iface.(loader); ok {
 			l.load(cfg)
 		}
+
 		t := v.Type()
 		n := v.NumField()
+
 		for i := 0; i < n; i++ {
 			f := t.Field(i)
 			cfg.forValue(v.FieldByIndex(f.Index), f.Name)
@@ -204,6 +227,7 @@ func Expand(s string) string {
 	if secret, ok := secrets.CutPrefix(s); ok {
 		return secrets.MustRead(secret, "")
 	}
+
 	return os.ExpandEnv(s)
 }
 
@@ -213,6 +237,7 @@ func (cfg *Config) Write(w io.Writer) error {
 	defer enc.Close()
 
 	enc.SetIndent(2)
+
 	return enc.Encode(cfg)
 }
 
@@ -230,6 +255,7 @@ func setInterval(v reflect.Value, d time.Duration) {
 			f.SetInt(int64(d))
 			return
 		}
+
 		n := v.NumField()
 		for i := 0; i < n; i++ {
 			setInterval(v.Field(i), d)
@@ -249,14 +275,17 @@ func (cfg *Config) SetMetrics(name ...string) {
 	v := reflect.ValueOf(cfg).Elem()
 	t := v.Type()
 	n := t.NumField()
+
 	for i := 0; i < n; i++ {
 		f := t.Field(i)
 		if f.Type.Kind() != reflect.Struct {
 			continue
 		}
+
 		if _, ok := f.Type.FieldByName("MetricConfig"); !ok {
 			continue
 		}
+
 		tag, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
 		enabled := enableAll || slices.Contains(name, tag)
 		v.FieldByIndex(f.Index).FieldByName("MetricConfig").FieldByName("Enabled").SetBool(enabled)
@@ -282,5 +311,6 @@ func templateFuncs() map[string]any {
 func loadTemplate(name, text string) (*template.Template, error) {
 	t := template.New(name)
 	t.Funcs(templateFuncs())
+
 	return t.Parse(text)
 }

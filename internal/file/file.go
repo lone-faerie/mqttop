@@ -28,12 +28,14 @@ func Open(name string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &File{f: f, opened: true}, nil
 }
 
 // Close closes the underlying [os.File] of f, rendering it unusable for I/O.
 func (f *File) Close() error {
 	f.opened = false
+
 	return f.f.Close()
 }
 
@@ -50,11 +52,14 @@ func (f *File) Reset() error {
 		if err != nil {
 			return err
 		}
+
 		f.f = newF
 	}
+
 	if f.r != nil {
 		f.r.Reset(f.f)
 	}
+
 	return nil
 }
 
@@ -73,22 +78,28 @@ func (f *File) ReadLine() (line []byte, err error) {
 	if f.r == nil {
 		f.r = bufio.NewReader(f.f)
 	}
+
 	line, isPrefix, err := f.r.ReadLine()
 	if err != nil {
 		return
 	}
+
 	f.buf = f.buf[:0]
+
 	for isPrefix {
 		f.buf = append(f.buf, line...)
+
 		line, isPrefix, err = f.r.ReadLine()
 		if err != nil {
 			return
 		}
 	}
+
 	if len(f.buf) > 0 {
 		f.buf = append(f.buf, line...)
 		line = f.buf
 	}
+
 	return
 }
 
@@ -96,11 +107,14 @@ func (f *File) ReadLine() (line []byte, err error) {
 // joined into a single path, and with symlinks followed.
 func Canonical(elem ...string) string {
 	path := filepath.Join(elem...)
+
 	symp, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return path
 	}
+
 	symp, _ = abs(symp)
+
 	return symp
 }
 

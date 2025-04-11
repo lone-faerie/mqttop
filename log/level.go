@@ -55,6 +55,7 @@ func (l Level) String() string {
 	if l >= LevelDisabled {
 		return "DISABLED"
 	}
+
 	return slog.Level(l).String()
 }
 
@@ -77,12 +78,14 @@ func (l *Level) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+
 	switch strings.ToLower(s) {
 	case "disable", "disabled", "false":
 		*l = LevelDisabled
 	default:
 		return (*slog.Level)(l).UnmarshalJSON(data)
 	}
+
 	return nil
 }
 
@@ -110,6 +113,7 @@ func (l *Level) UnmarshalText(data []byte) (err error) {
 	default:
 		err = (*slog.Level)(l).UnmarshalText(data)
 	}
+
 	return
 }
 

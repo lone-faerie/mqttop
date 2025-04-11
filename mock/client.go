@@ -64,7 +64,7 @@ func (c *MockClient) Publish(topic string, qos byte, retained bool, payload inte
 	}
 	e := json.NewEncoder(c.w)
 	e.SetIndent("", "  ")
-	err := e.Encode(map[string]json.RawMessage{topic: json.RawMessage(p)})
+	err := e.Encode(map[string]json.RawMessage{topic: p})
 	if err != nil {
 		log.Error("Error encoding "+topic, err)
 	}

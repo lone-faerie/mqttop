@@ -18,7 +18,7 @@ var StopCommand = &cobra.Command{
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 		log.SetLogLevel(log.LevelWarn)
-		initConfig()
+		findConfig()
 		cfg, err = config.Load(ConfigPath...)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return

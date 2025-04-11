@@ -9,16 +9,20 @@ func load() {
 		version = semver(version) + " (dev)"
 		return
 	}
+
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return
 	}
+
 	if pkg == "" {
 		pkg = info.Main.Path
 	}
+
 	if version == "" {
 		version = info.Main.Version + " (dev)"
 	}
+
 	if buildTime == "" {
 		for _, s := range info.Settings {
 			if s.Key == "vcs.time" {
@@ -26,6 +30,7 @@ func load() {
 				if buildTime[len(buildTime)-1] == 'Z' {
 					buildTime = buildTime[:len(buildTime)-1] + "+00:00"
 				}
+
 				break
 			}
 		}

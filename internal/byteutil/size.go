@@ -31,6 +31,7 @@ func SizeOf(v uint64) ByteSize {
 	if size > PiB {
 		size = PiB
 	}
+
 	return size
 }
 
@@ -50,7 +51,8 @@ func ParseSize(s string) (ByteSize, error) {
 	case "PiB":
 		return PiB, nil
 	}
-	return -1, fmt.Errorf("Unknown ByteSize %s", s)
+
+	return -1, fmt.Errorf("unknown ByteSize %s", s)
 }
 
 // String returns the string representation of s.
@@ -69,6 +71,7 @@ func (s ByteSize) String() string {
 	case PiB:
 		return "PiB"
 	}
+
 	return "Unknown"
 }
 
@@ -88,16 +91,19 @@ func (s ByteSize) MarshalJSON() ([]byte, error) {
 	case PiB:
 		return []byte("\"PiB\""), nil
 	}
-	return nil, fmt.Errorf("Unknown ByteSize %d", s)
+
+	return nil, fmt.Errorf("unknown ByteSize %d", s)
 }
 
 // AppendSize appends the string representation of v bytes scaled to size, with
 // 3 decimal places of precision.
 func AppendSize(b []byte, v uint64, size ByteSize) []byte {
 	const overflow = ((1 << 64) - 1) / 1000
+
 	if size < 0 {
 		size = SizeOf(v)
 	}
+
 	if size == Bytes {
 		return strconv.AppendUint(b, v, 10)
 	}
@@ -108,6 +114,7 @@ func AppendSize(b []byte, v uint64, size ByteSize) []byte {
 	} else {
 		v = (1000 * v) >> size
 	}
+
 	if v == 0 {
 		return append(b, '0')
 	}
@@ -115,6 +122,7 @@ func AppendSize(b []byte, v uint64, size ByteSize) []byte {
 	if v%1000 == 0 {
 		return strconv.AppendUint(b, v/1000, 10)
 	}
+
 	return AppendDecimal(b, int64(v), 3)
 }
 
@@ -122,23 +130,30 @@ func AppendSize(b []byte, v uint64, size ByteSize) []byte {
 // representation of size.
 func WriteSize(w io.Writer, v uint64, size ByteSize) (n int, err error) {
 	var b []byte
+
 	switch buf := w.(type) {
 	case *bytes.Buffer:
 		b = buf.AvailableBuffer()
 	case *bufio.Writer:
 		b = buf.AvailableBuffer()
 	}
+
 	b = AppendSize(b, v, size)
+
 	if n, err = w.Write(b); err != nil {
 		return
 	}
+
 	var m int
+
 	if s, ok := w.(io.StringWriter); ok {
 		m, err = s.WriteString(" " + size.String())
 	} else {
 		m, err = w.Write(append([]byte{' '}, size.String()...))
 	}
+
 	n += m
+
 	return
 }
 
@@ -171,7 +186,8 @@ func ParseRate(s string) (ByteRate, error) {
 	case "PiB/s", "PiBps":
 		return PiBps, nil
 	}
-	return -1, fmt.Errorf("Unknown ByteRate %s", s)
+
+	return -1, fmt.Errorf("unknown ByteRate %s", s)
 }
 
 // String returns the string representation of r.
@@ -190,6 +206,7 @@ func (r ByteRate) String() string {
 	case PiBps:
 		return "PiB/s"
 	}
+
 	return "Unknown"
 }
 
@@ -209,5 +226,6 @@ func (r ByteRate) MarshalJSON() ([]byte, error) {
 	case PiBps:
 		return []byte("\"PiB/s\""), nil
 	}
-	return nil, fmt.Errorf("Unknown ByteRate %d", r)
+
+	return nil, fmt.Errorf("unknown ByteRate %d", r)
 }

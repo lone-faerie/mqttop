@@ -1,4 +1,4 @@
-// Package build provides varaibles that are set at build-time
+// Package build provides variables that are set at build-time
 // with the -X ldflag. If the values are not given at build-time,
 // they will be determined from [debug.BuildInfo].
 package build
@@ -21,6 +21,7 @@ func semver(v string) string {
 	if loc == nil {
 		return v
 	}
+
 	return v[loc[0]:loc[1]]
 }
 

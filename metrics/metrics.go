@@ -42,6 +42,7 @@ type Metric interface {
 // If any metric returns an error, it is simply ignored and will not be in the slice.
 func New(cfg *config.Config) []Metric {
 	var m []Metric
+
 	if cfg.CPU.Enabled {
 		if cpu, err := NewCPU(cfg); err == nil {
 			m = append(m, cpu)
@@ -49,6 +50,7 @@ func New(cfg *config.Config) []Metric {
 			log.Error("Couldn't initialize CPU", err)
 		}
 	}
+
 	if cfg.Memory.Enabled {
 		if mem, err := NewMemory(cfg); err == nil {
 			m = append(m, mem)
@@ -56,6 +58,7 @@ func New(cfg *config.Config) []Metric {
 			log.Error("Couldn't initialize memory", err)
 		}
 	}
+
 	if cfg.Disks.Enabled {
 		if disks, err := NewDisks(cfg); err == nil {
 			m = append(m, disks)
@@ -63,6 +66,7 @@ func New(cfg *config.Config) []Metric {
 			log.Error("Couldn't initialize disks", err)
 		}
 	}
+
 	if cfg.Net.Enabled {
 		if net, err := NewNet(cfg); err == nil {
 			m = append(m, net)
@@ -70,6 +74,7 @@ func New(cfg *config.Config) []Metric {
 			log.Error("Couldn't initialize net", err)
 		}
 	}
+
 	if cfg.Battery.Enabled {
 		if bat, err := NewBattery(cfg); err == nil {
 			m = append(m, bat)
@@ -77,9 +82,11 @@ func New(cfg *config.Config) []Metric {
 			log.Error("Couldn't initialize battery", err)
 		}
 	}
+
 	if len(cfg.Dirs) > 0 {
 		m = slices.Grow(m, len(cfg.Dirs))
 	}
+
 	for i := range cfg.Dirs {
 		if dir, err := newDir(&cfg.Dirs[i], cfg); err == nil {
 			m = append(m, dir)
@@ -87,9 +94,11 @@ func New(cfg *config.Config) []Metric {
 			log.Error("Couldn't initialize dir", err)
 		}
 	}
+
 	if cfg.GPU.Enabled {
 		m = appendGPU(m, cfg)
 	}
+
 	return m
 }
 
@@ -104,14 +113,17 @@ func SetInterval(d time.Duration, m ...Metric) {
 // error is the first error encountered, or nil if there were no errors.
 func Start(ctx context.Context, m ...Metric) error {
 	var e, err error
+
 	for _, mm := range m {
 		if mm == nil {
 			continue
 		}
+
 		if e = mm.Start(ctx); e != nil && err == nil {
 			err = e
 		}
 	}
+
 	return err
 }
 
@@ -122,6 +134,7 @@ func Stop(m ...Metric) {
 		if mm == nil {
 			continue
 		}
+
 		mm.Stop()
 	}
 }

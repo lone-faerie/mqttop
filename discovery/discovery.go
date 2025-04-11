@@ -27,7 +27,7 @@ const (
 	Switch       = "switch"        // https://www.home-assistant.io/integrations/switch.mqtt/
 )
 
-// Home Assitant entity categories
+// Home Assistant entity categories
 const (
 	Config     = "config"
 	Diagnostic = "diagnostic"
@@ -72,13 +72,18 @@ func Load(path string) (*Discovery, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		log.Debug("Err is not exist", "result", errors.Is(err, os.ErrNotExist))
+		return nil, err
 	}
+
 	defer f.Close()
+
 	d := &Discovery{}
+
 	if err := json.NewDecoder(f).Decode(d); err != nil {
 		log.Error("Unable to decode discovery", err)
 		return nil, err
 	}
+
 	return d, nil
 }
 
@@ -88,11 +93,13 @@ func New(cfg *config.DiscoveryConfig) (*Discovery, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	switch cfg.DeviceName {
 	case "", "hostname":
 	default:
 		dev.Name = cfg.DeviceName
 	}
+
 	if dev.Name == "" {
 		dev.Name = "Mqttop"
 	}
@@ -106,12 +113,15 @@ func New(cfg *config.DiscoveryConfig) (*Discovery, error) {
 		cfg:               cfg,
 		Method:            cfg.Method,
 	}
+
 	if d.Method == "nodes" || d.Method == "metrics" {
 		d.Nodes = make(map[string][]string)
 	}
+
 	if d.NodeID == "" {
 		d.NodeID = "mqttop"
 	}
+
 	switch {
 	case len(dev.Identifiers) > 0:
 		d.ObjectID = strings.Join(dev.Identifiers, "_")
@@ -120,11 +130,13 @@ func New(cfg *config.DiscoveryConfig) (*Discovery, error) {
 			if i > 0 {
 				d.ObjectID += "_"
 			}
+
 			d.ObjectID += dev.Connections[i][1]
 		}
 	default:
-		return nil, errors.New("No object id")
+		return nil, errors.New("no object id")
 	}
+
 	return d, nil
 }
 
@@ -133,12 +145,15 @@ func (d *Discovery) Topic(prefix, component, nodeID, objectID string) string {
 	if objectID == "" {
 		objectID = d.ObjectID
 	}
+
 	var elems []string
+
 	if nodeID != "" {
 		elems = []string{prefix, component, nodeID, objectID, "config"}
 	} else {
 		elems = []string{prefix, component, objectID, "config"}
 	}
+
 	return strings.Join(elems, "/")
 }
 
@@ -155,11 +170,15 @@ func (d *Discovery) Write(path string) error {
 	if err != nil {
 		return err
 	}
+
 	defer f.Close()
+
 	f.Truncate(0)
 	f.Seek(0, 0)
+
 	e := json.NewEncoder(f)
 	e.SetIndent("", "  ")
+
 	return e.Encode(d)
 }
 
@@ -169,10 +188,13 @@ func (d *Discovery) Wait(ctx context.Context, c mqtt.Client) error {
 	if d.cfg.WaitTopic == "" {
 		return nil
 	}
+
 	ch := make(chan error)
 	defer close(ch)
+
 	t := c.Subscribe(d.cfg.WaitTopic, 0, func(_ mqtt.Client, msg mqtt.Message) {
 		msg.Ack()
+
 		if d.cfg.WaitPayload == "" || string(msg.Payload()) == d.cfg.WaitPayload {
 			t := c.Unsubscribe(d.cfg.WaitTopic)
 			select {
@@ -185,34 +207,42 @@ func (d *Discovery) Wait(ctx context.Context, c mqtt.Client) error {
 			}
 		}
 	})
+
 	select {
 	case <-ctx.Done():
 		return nil
 	case <-t.Done():
 	}
+
 	if err := t.Error(); err != nil {
 		return err
 	}
+
 	return <-ch
 }
 
 func (d *Discovery) publishDevice(ctx context.Context, c mqtt.Client, migrate bool) error {
 	nodes := d.Nodes
 	d.Nodes = nil
+
 	defer func() {
 		d.Nodes = nodes
 	}()
+
 	if migrate {
 		if err := d.Migrate(ctx, c); err != nil {
 			return err
 		}
 	}
+
 	if err := d.publishDeviceNode(ctx, c, d.NodeID); err != nil {
 		return err
 	}
+
 	if migrate {
 		return d.removeComponents(ctx, c)
 	}
+
 	return nil
 }
 
@@ -221,36 +251,46 @@ func (d *Discovery) publishDeviceNode(ctx context.Context, c mqtt.Client, nodeID
 	if err != nil {
 		return err
 	}
+
 	topic := d.Topic(d.cfg.Prefix, "device", nodeID, d.ObjectID)
 	t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
+
 	select {
 	case <-ctx.Done():
 		return nil
 	case <-t.Done():
 	}
+
 	if err := t.Error(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (d *Discovery) publishComponents(ctx context.Context, c mqtt.Client, migrate bool, components ...string) (err error) {
 	nodes := d.Nodes
 	d.Nodes = nil
+
 	defer func() {
 		d.Nodes = nodes
 	}()
+
 	if migrate {
 		if err = d.Rollback(ctx, c); err != nil {
 			return
 		}
 	}
+
 	var payload []byte
+
 	for name, cmp := range d.Components {
 		if len(components) > 0 && !slices.Contains(components, name) {
 			continue
 		}
+
 		platform := cmp[Platform].(string)
+
 		if len(cmp) == 1 {
 			payload = []byte{}
 		} else {
@@ -258,36 +298,45 @@ func (d *Discovery) publishComponents(ctx context.Context, c mqtt.Client, migrat
 			cmp[optOrigin] = d.Origin
 			cmp[optDevice] = d.Device
 			payload, err = json.Marshal(cmp)
+
 			if err != nil {
 				return err
 			}
+
 			cmp[Platform] = platform
 			delete(cmp, optOrigin)
 			delete(cmp, optDevice)
 		}
+
 		topic := d.Topic(d.cfg.Prefix, platform, d.NodeID, name)
 		t := c.Publish(topic, d.cfg.QoS, d.cfg.Retained, payload)
+
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-t.Done():
 		}
+
 		if err := t.Error(); err != nil {
 			return err
 		}
 	}
+
 	if migrate {
 		return d.removeDevice(ctx, c)
 	}
+
 	return nil
 }
 
 func (d *Discovery) publishNodes(ctx context.Context, c mqtt.Client, migrate bool, nodes ...string) error {
 	dNodes := d.Nodes
 	d.Nodes = nil
+
 	defer func() {
 		d.Nodes = dNodes
 	}()
+
 	nodeD := Discovery{
 		Origin:     d.Origin,
 		Device:     d.Device,
@@ -295,31 +344,39 @@ func (d *Discovery) publishNodes(ctx context.Context, c mqtt.Client, migrate boo
 		ObjectID:   d.ObjectID,
 		cfg:        d.cfg,
 	}
+
 	var it iter.Seq[string]
+
 	if len(nodes) > 0 {
 		it = slices.Values(nodes)
 	} else {
 		it = maps.Keys(dNodes)
 	}
+
 	for node := range it {
 		cmps, ok := dNodes[node]
 		if !ok || len(cmps) == 0 {
 			continue
 		}
+
 		clear(nodeD.Components)
+
 		for _, c := range cmps {
 			cmp, ok := d.Components[c]
 			if ok {
 				nodeD.Components[c] = cmp
 			}
 		}
+
 		if len(nodeD.Components) == 0 {
 			continue
 		}
+
 		if err := nodeD.publishDeviceNode(ctx, c, d.NodeID+"_"+node); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -329,23 +386,30 @@ func (d *Discovery) publishNodes(ctx context.Context, c mqtt.Client, migrate boo
 func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool, args ...string) (err error) {
 	method := d.Method
 	d.Method = ""
+
 	defer func() {
 		d.Method = method
 	}()
+
 	switch method {
 	case "", "device":
 		log.Debug("Publishing discovery", "method", "device")
+
 		err = d.publishDevice(ctx, c, migrate)
 	case "components":
 		log.Debug("Publishing discovery", "method", "components")
+
 		err = d.publishComponents(ctx, c, migrate, args...)
 	case "nodes", "metrics":
 		log.Debug("Publishing discovery", "method", "nodes")
+
 		err = d.publishNodes(ctx, c, migrate, args...)
 	}
+
 	if err != nil {
 		log.Error("Unsuccessful discovery", err)
 	}
+
 	return
 }
 
@@ -355,11 +419,13 @@ func (d *Discovery) Subscribe(ctx context.Context, c mqtt.Client) error {
 			go d.Publish(ctx, c, false)
 		}
 	})
+
 	select {
 	case <-ctx.Done():
 		return nil
 	case <-t.Done():
 	}
+
 	return t.Error()
 }
 
@@ -370,6 +436,7 @@ func shouldMigrate(method, old string) bool {
 	case "components":
 		return method == "" || method == "device"
 	}
+
 	return false
 }
 
@@ -379,13 +446,16 @@ func (d *Discovery) Diff(old *Discovery) bool {
 	if old == nil {
 		return false
 	}
+
 	for name, cmp := range old.Components {
 		if _, ok := d.Components[name]; ok || len(cmp) <= 1 {
 			continue
 		}
+
 		d.Components[name] = Component{
 			Platform: cmp[Platform],
 		}
 	}
+
 	return shouldMigrate(d.Method, old.Method)
 }

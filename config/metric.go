@@ -187,7 +187,7 @@ type BatteryConfig struct {
 	MetricConfig `yaml:",inline"`
 
 	// TimeFormat is the format used when rendering the amount of time
-	// remianing on the battery.
+	// remaining on the battery.
 	// See https://pkg.go.dev/time#pkg-constants
 	TimeFormat string `yaml:"time_format,omitempty"`
 }
@@ -309,11 +309,14 @@ func (cfg *CPUConfig) load(_ *Config) error {
 	if !cfg.Enabled || cfg.NameTemplate == "" {
 		return nil
 	}
+
 	t, err := loadTemplate("cpu_name", cfg.NameTemplate)
 	if err != nil {
 		return err
 	}
+
 	cfg.nameTemplate = t
+
 	return nil
 }
 
@@ -323,10 +326,12 @@ func (cfg *CPUConfig) FormatName(name string) string {
 	if cfg.nameTemplate == nil {
 		return name
 	}
+
 	var b strings.Builder
 	if err := cfg.nameTemplate.Execute(&b, name); err != nil {
 		return name
 	}
+
 	return b.String()
 }
 
@@ -335,14 +340,18 @@ func (cfg *CPUConfig) FormatName(name string) string {
 // is set to the value of node.
 func (cfg *DiskConfig) UnmarshalYAML(node *yaml.Node) error {
 	type Wrapped DiskConfig
+
 	if node.Kind&yaml.MappingNode != 0 {
 		return node.Decode((*Wrapped)(cfg))
 	}
+
 	var s string
 	if err := node.Decode(&s); err != nil {
 		return err
 	}
+
 	cfg.MountPoint = s
+
 	return nil
 }
 
@@ -354,10 +363,13 @@ func (cfg *DisksConfig) load(c *Config) (err error) {
 			if err != nil {
 				return err
 			}
+
 			cfg.Disk[i].nameTemplate = t
 		}
+
 		cfg.diskMap[cfg.Disk[i].MountPoint] = &cfg.Disk[i]
 	}
+
 	switch cfg.Rescan {
 	case "true", "True", "TRUE", "y", "Y", "yes", "Yes", "YES", "on", "On", "ON":
 		if cfg.Interval > 0 {
@@ -370,6 +382,7 @@ func (cfg *DisksConfig) load(c *Config) (err error) {
 	default:
 		cfg.RescanInterval, err = time.ParseDuration(cfg.Rescan)
 	}
+
 	return
 }
 
@@ -389,14 +402,18 @@ func (cfg *DisksConfig) ConfigFor(mnt string) *DiskConfig {
 // is set to the value of node.
 func (cfg *NetIfaceConfig) UnmarshalYAML(node *yaml.Node) error {
 	type Wrapped NetIfaceConfig
+
 	if node.Kind&yaml.MappingNode != 0 {
 		return node.Decode((*Wrapped)(cfg))
 	}
+
 	var s string
 	if err := node.Decode(&s); err != nil {
 		return err
 	}
+
 	cfg.Interface = s
+
 	return nil
 }
 
@@ -406,13 +423,16 @@ func (cfg *NetIfaceConfig) FormatName(name string) string {
 	if cfg.Name != "" {
 		return cfg.Name
 	}
+
 	if cfg.nameTemplate == nil {
 		return name
 	}
+
 	var b strings.Builder
 	if err := cfg.nameTemplate.Execute(&b, name); err != nil {
 		return name
 	}
+
 	return b.String()
 }
 
@@ -429,16 +449,20 @@ func (cfg *NetConfig) load(c *Config) (err error) {
 	default:
 		cfg.RescanInterval, err = time.ParseDuration(cfg.Rescan)
 	}
+
 	for i := range cfg.Include {
 		if cfg.Include[i].NameTemplate == "" {
 			continue
 		}
+
 		t, err := loadTemplate("net_"+cfg.Include[i].Interface, cfg.Include[i].NameTemplate)
 		if err != nil {
 			return err
 		}
+
 		cfg.Include[i].nameTemplate = t
 	}
+
 	return
 }
 
@@ -446,11 +470,14 @@ func (cfg *DirConfig) load(_ *Config) (err error) {
 	if cfg.NameTemplate == "" {
 		return
 	}
+
 	t, err := loadTemplate("dir_"+cfg.Path, cfg.NameTemplate)
 	if err != nil {
 		return
 	}
+
 	cfg.nameTemplate = t
+
 	return
 }
 
@@ -460,13 +487,16 @@ func (cfg *DirConfig) FormatName(name string) string {
 	if cfg.Name != "" {
 		return cfg.Name
 	}
+
 	if cfg.nameTemplate == nil {
 		return name
 	}
+
 	var b strings.Builder
 	if err := cfg.nameTemplate.Execute(&b, name); err != nil {
 		return name
 	}
+
 	return b.String()
 }
 
@@ -475,15 +505,19 @@ func (cfg *DirConfig) FormatName(name string) string {
 // is set to the value of node.
 func (cfg *DirConfig) UnmarshalYAML(node *yaml.Node) error {
 	type Wrapped DirConfig
+
 	cfg.Depth = -1
 	if node.Kind&yaml.MappingNode != 0 {
 		return node.Decode((*Wrapped)(cfg))
 	}
+
 	var s string
 	if err := node.Decode(&s); err != nil {
 		return err
 	}
+
 	cfg.Path = s
+
 	return nil
 }
 
@@ -491,11 +525,14 @@ func (cfg *GPUConfig) load(_ *Config) error {
 	if cfg.NameTemplate == "" {
 		return nil
 	}
+
 	t, err := loadTemplate("gpu_name", cfg.NameTemplate)
 	if err != nil {
 		return err
 	}
+
 	cfg.nameTemplate = t
+
 	return nil
 }
 
@@ -505,13 +542,16 @@ func (cfg *GPUConfig) FormatName(name string) string {
 	if cfg.Name != "" {
 		return cfg.Name
 	}
+
 	if cfg.nameTemplate == nil {
 		return name
 	}
+
 	var b strings.Builder
 	if err := cfg.nameTemplate.Execute(&b, name); err != nil {
 		return name
 	}
+
 	return b.String()
 }
 

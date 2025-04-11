@@ -48,5 +48,6 @@ func (debugLogger) Printf(format string, v ...any) {}
 func SetLogLevel(level Level) (oldLevel Level) {
 	l := slog.Level(level)
 	old := slog.SetLogLoggerLevel(l)
+
 	return Level(old)
 }

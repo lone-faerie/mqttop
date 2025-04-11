@@ -54,8 +54,8 @@ func WithLogLevel(level log.Level) Option {
 	}
 }
 
-func WithTopicPrefix(prefix string) Option {
+func WithBaseTopic(topic string) Option {
 	return func(b *Bridge) {
-		b.topicPrefix = prefix
+		b.baseTopic = topic
 	}
 }

@@ -18,18 +18,23 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 	prefix := d.Origin.Name + "_gpu_" + strconv.Itoa(g.index)
 	id := prefix
 	avail := availabilityTemplate(g.Topic())
+
 	var cmps []string
+
 	if d.Nodes != nil {
 		node, ok := d.Nodes[g.Type()]
 		if !ok || node == nil {
 			node = make([]string, 0, 7)
 		}
+
 		cmps = node
 	}
+
 	if g.flags.Has(gpuUtilization) {
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 g.Name + " usage",
@@ -43,11 +48,13 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 			discovery.UniqueID:             id,
 		}
 	}
+
 	if g.flags.Has(gpuPower) {
 		id = prefix + "_power"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:               discovery.Sensor,
 			discovery.Name:                   g.Name + " power",
@@ -63,11 +70,13 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 			discovery.UniqueID:               id,
 		}
 	}
+
 	if g.flags.Has(gpuTemperature) {
 		id = prefix + "_temperature"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:               discovery.Sensor,
 			discovery.Name:                   g.Name + " temperature",
@@ -83,17 +92,21 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 			discovery.UniqueID:               id,
 		}
 	}
+
 	if g.flags.Has(gpuMemory | gpuMemoryV2 | gpuUtilization) {
 		var template string
+
 		if g.flags.Has(gpuUtilization) {
 			template = "{{ value_json.utilization.memory }}"
 		} else {
 			template = "{{ 100 * value_json.memory.used / value_json.memory.total }}"
 		}
+
 		id = prefix + "_memory"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 g.Name + " memory",
@@ -106,11 +119,13 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 			discovery.UnitOfMeasurement:    "%",
 			discovery.UniqueID:             id,
 		}
+
 		if g.flags.Has(gpuMemory | gpuMemoryV2) {
 			id = prefix + "_memory_total"
 			if cmps != nil {
 				cmps = append(cmps, id)
 			}
+
 			d.Components[id] = discovery.Component{
 				discovery.Platform:             discovery.Sensor,
 				discovery.Name:                 g.Name + " memory total",
@@ -125,10 +140,12 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 				discovery.UniqueID:             id,
 				discovery.EnabledByDefault:     false,
 			}
+
 			id = prefix + "_memory_free"
 			if cmps != nil {
 				cmps = append(cmps, id)
 			}
+
 			d.Components[id] = discovery.Component{
 				discovery.Platform:             discovery.Sensor,
 				discovery.Name:                 g.Name + " memory free",
@@ -143,10 +160,12 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 				discovery.UniqueID:             id,
 				discovery.EnabledByDefault:     false,
 			}
+
 			id = prefix + "_memory_used"
 			if cmps != nil {
 				cmps = append(cmps, id)
 			}
+
 			d.Components[id] = discovery.Component{
 				discovery.Platform:             discovery.Sensor,
 				discovery.Name:                 g.Name + " memory used",
@@ -163,6 +182,47 @@ func (g *NvidiaGPU) Discover(d *discovery.Discovery) {
 			}
 		}
 	}
+
+	if g.flags.Has(gpuThroughput) {
+		id = prefix + "_rx"
+		if cmps != nil {
+			cmps = append(cmps, id)
+		}
+
+		d.Components[id] = discovery.Component{
+			discovery.Platform:             discovery.Sensor,
+			discovery.Name:                 g.Name + " rx",
+			discovery.EntityCategory:       discovery.Diagnostic,
+			discovery.DeviceClass:          "data_rate",
+			discovery.AvailabilityTopic:    d.AvailabilityTopic,
+			discovery.AvailabilityTemplate: avail,
+			discovery.StateTopic:           g.Topic(),
+			discovery.ValueTemplate:        "{{ value_json.rx }}",
+			discovery.UnitOfMeasurement:    "kB/s",
+			discovery.UniqueID:             id,
+			discovery.EnabledByDefault:     false,
+		}
+
+		id = prefix + "_tx"
+		if cmps != nil {
+			cmps = append(cmps, id)
+		}
+
+		d.Components[id] = discovery.Component{
+			discovery.Platform:             discovery.Sensor,
+			discovery.Name:                 g.Name + " tx",
+			discovery.EntityCategory:       discovery.Diagnostic,
+			discovery.DeviceClass:          "data_rate",
+			discovery.AvailabilityTopic:    d.AvailabilityTopic,
+			discovery.AvailabilityTemplate: avail,
+			discovery.StateTopic:           g.Topic(),
+			discovery.ValueTemplate:        "{{ value_json.tx }}",
+			discovery.UnitOfMeasurement:    "kB/s",
+			discovery.UniqueID:             id,
+			discovery.EnabledByDefault:     false,
+		}
+	}
+
 	if cmps != nil {
 		d.Nodes[g.Type()] = cmps
 	}

@@ -74,7 +74,9 @@ func NetStatistics(iface string) (rx, tx uint64, err error) {
 	if rx, err = file.ReadUint(path + file.Separator + "rx_bytes"); err != nil {
 		return
 	}
+
 	tx, err = file.ReadUint(path + file.Separator + "tx_bytes")
+
 	return
 }
 

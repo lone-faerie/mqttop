@@ -61,6 +61,7 @@ var RootCommand = &cobra.Command{
 
 func init() {
 	cobra.EnableCommandSorting = false
+
 	RootCommand.SetVersionTemplate(BannerTemplate())
 	RootCommand.SetHelpTemplate(RootCommand.HelpTemplate() + "\n" + fullDocsFooter + "\n")
 	RootCommand.AddGroup(

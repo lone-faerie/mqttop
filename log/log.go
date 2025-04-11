@@ -35,14 +35,14 @@ var defaultLogger = &logger{
 
 // With includes the given attributes in outputs from the default logger.
 func With(args ...any) {
-	defaultLogger.Logger = defaultLogger.Logger.With(args...)
+	defaultLogger.Logger = defaultLogger.With(args...)
 	defaultLogger.with = args
 }
 
 // WithGroup sets the default logger to one that starts a group, if name is non-empty.
 // The keys of all attributes added to the Logger will be qualified by the given name.
 func WithGroup(name string) {
-	defaultLogger.Logger = defaultLogger.Logger.WithGroup(name)
+	defaultLogger.Logger = defaultLogger.WithGroup(name)
 	defaultLogger.group = name
 }
 
@@ -61,6 +61,7 @@ func Error(msg string, err error, args ...any) {
 	if err != nil {
 		args = append([]any{"cause", err}, args...)
 	}
+
 	defaultLogger.Error(msg, args...)
 }
 
@@ -80,6 +81,7 @@ func WarnError(msg string, err error, args ...any) {
 	if err != nil {
 		args = append([]any{"cause", err}, args...)
 	}
+
 	defaultLogger.Warn(msg, args...)
 }
 

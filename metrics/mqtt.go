@@ -23,17 +23,22 @@ func availabilityTemplate(topic string) string {
 func (b *Battery) Discover(d *discovery.Discovery) {
 	id := d.Origin.Name + "_battery_state"
 	avail := availabilityTemplate(b.Topic())
+
 	var cmps []string
+
 	if d.Nodes != nil {
 		node, ok := d.Nodes[b.Type()]
 		if !ok || node == nil {
 			node = make([]string, 0, 4)
 		}
+
 		cmps = node
 	}
+
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:               discovery.Sensor,
 		discovery.Name:                   "Battery state",
@@ -51,10 +56,12 @@ func (b *Battery) Discover(d *discovery.Discovery) {
 		},
 		discovery.UniqueID: id,
 	}
+
 	id = d.Origin.Name + "_battery_charging"
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.BinarySensor,
 		discovery.Name:                 "Battery charging",
@@ -67,11 +74,13 @@ func (b *Battery) Discover(d *discovery.Discovery) {
 		discovery.UniqueID:             id,
 		discovery.EnabledByDefault:     false,
 	}
+
 	if b.hasCapacity() {
 		id = d.Origin.Name + "_battery_level"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 "Battery level",
@@ -84,16 +93,19 @@ func (b *Battery) Discover(d *discovery.Discovery) {
 			discovery.UnitOfMeasurement:    "%",
 			discovery.UniqueID:             id,
 		}
+
 		if b.hasTimeRemaining() {
 			d.Components[id][discovery.JSONAttributesTopic] = b.Topic()
 			d.Components[id][discovery.JSONAttributesTemplate] = "{{ iif(value_json.timeRemaining is defined, {'remaining': value_json.timeRemaining}, {}) | tojson }}"
 		}
 	}
+
 	if b.flags.Has(batteryPower) {
 		id = d.Origin.Name + "_battery_power"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 "Battery power",
@@ -108,6 +120,7 @@ func (b *Battery) Discover(d *discovery.Discovery) {
 			discovery.EnabledByDefault:     false,
 		}
 	}
+
 	if cmps != nil {
 		d.Nodes[b.Type()] = cmps
 	}
@@ -116,16 +129,21 @@ func (b *Battery) Discover(d *discovery.Discovery) {
 // CPU Discovery
 
 func (c *CPU) discover(core int, d *discovery.Discovery) {
-	var id, name, template string
-	avail := availabilityTemplate(c.Topic())
-	var cmps []string
+	var (
+		id, name, template string
+		avail              = availabilityTemplate(c.Topic())
+		cmps               []string
+	)
+
 	if d.Nodes != nil {
 		node, ok := d.Nodes[c.Type()]
 		if !ok || node == nil {
 			node = make([]string, 0, 3)
 		}
+
 		cmps = node
 	}
+
 	if c.flags.Has(cpuUsage) {
 		if core == -1 {
 			id = d.Origin.Name + "_cpu"
@@ -136,9 +154,11 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 			name = "Core " + strconv.Itoa(core) + " usage"
 			template = fmt.Sprintf("{{ value_json[%d].usage }}", core)
 		}
+
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 name,
@@ -153,6 +173,7 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 			discovery.EnabledByDefault:     core == -1,
 		}
 	}
+
 	if c.flags.Has(cpuTemperature) {
 		if core == -1 {
 			id = d.Origin.Name + "_cpu_temperature"
@@ -163,9 +184,11 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 			name = "Core " + strconv.Itoa(core) + " temperature"
 			template = fmt.Sprintf("{{ value_json.cores[%d].temperature }}", core)
 		}
+
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 name,
@@ -180,6 +203,7 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 			discovery.EnabledByDefault:     core == -1,
 		}
 	}
+
 	if c.flags.Has(cpuFrequency) {
 		if core == -1 {
 			id = d.Origin.Name + "_cpu_frequency"
@@ -190,9 +214,11 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 			name = "Core " + strconv.Itoa(core) + " frequency"
 			template = fmt.Sprintf("{{ value_json.cores[%d].frequency }}", core)
 		}
+
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:                  discovery.Sensor,
 			discovery.Name:                      name,
@@ -208,6 +234,7 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 			discovery.EnabledByDefault:          core == -1,
 		}
 	}
+
 	if cmps != nil {
 		d.Nodes[c.Type()] = cmps
 	}
@@ -217,6 +244,7 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 // cpu and core temperature, and cpu and core frequency.
 func (c *CPU) Discover(d *discovery.Discovery) {
 	c.discover(-1, d)
+
 	for i := range c.cores {
 		c.discover(c.cores[i].logical, d)
 	}
@@ -228,17 +256,22 @@ func (c *CPU) Discover(d *discovery.Discovery) {
 func (d *Dir) Discover(disc *discovery.Discovery) {
 	id := disc.Origin.Name + "_dir_" + d.Slug()
 	avail := availabilityTemplate(d.Topic())
+
 	var cmps []string
+
 	if disc.Nodes != nil {
 		node, ok := disc.Nodes[d.Type()]
 		if !ok || node == nil {
 			node = make([]string, 0, 1)
 		}
+
 		cmps = node
 	}
+
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	disc.Components[id] = discovery.Component{
 		discovery.Platform:               discovery.Sensor,
 		discovery.Name:                   "Dir " + d.Name,
@@ -254,6 +287,7 @@ func (d *Dir) Discover(disc *discovery.Discovery) {
 		discovery.JSONAttributesTemplate: "{{ {'path': value_json.path} | tojson }}",
 		discovery.UniqueID:               id,
 	}
+
 	if cmps != nil {
 		disc.Nodes[d.Type()] = cmps
 	}
@@ -265,17 +299,22 @@ func (d *Disk) discover(dsks *Disks, disc *discovery.Discovery) {
 	id := disc.Origin.Name + "_disk_" + d.Name
 	name := "Disk " + d.Name
 	avail := availabilityTemplate(dsks.Topic())
+
 	var cmps []string
+
 	if disc.Nodes != nil {
 		node, ok := disc.Nodes[dsks.Type()]
 		if !ok || node == nil {
 			node = make([]string, 0, 3)
 		}
+
 		cmps = node
 	}
+
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	disc.Components[id] = discovery.Component{
 		discovery.Platform:                  discovery.Sensor,
 		discovery.Name:                      name,
@@ -295,11 +334,13 @@ func (d *Disk) discover(dsks *Disks, disc *discovery.Discovery) {
 		),
 		discovery.UniqueID: id,
 	}
+
 	if d.showIO {
 		id = disc.Origin.Name + "_disk_" + d.Name + "_rx"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		disc.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 name + " rx",
@@ -314,10 +355,12 @@ func (d *Disk) discover(dsks *Disks, disc *discovery.Discovery) {
 			discovery.UniqueID:             id,
 			discovery.EnabledByDefault:     false,
 		}
+
 		id = disc.Origin.Name + "_disk_" + d.Name + "_tx"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		disc.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 name + " tx",
@@ -333,6 +376,7 @@ func (d *Disk) discover(dsks *Disks, disc *discovery.Discovery) {
 			discovery.EnabledByDefault:     false,
 		}
 	}
+
 	if cmps != nil {
 		disc.Nodes[dsks.Type()] = cmps
 	}
@@ -354,17 +398,22 @@ func (d *Disks) Discover(disc *discovery.Discovery) {
 func (m *Memory) Discover(d *discovery.Discovery) {
 	id := d.Origin.Name + "_memory"
 	avail := availabilityTemplate(m.Topic())
+
 	var cmps []string
+
 	if d.Nodes != nil {
 		node, ok := d.Nodes[m.Type()]
 		if !ok || node == nil {
 			node = make([]string, 0, 9)
 		}
+
 		cmps = node
 	}
+
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:                  discovery.Sensor,
 		discovery.Name:                      "Memory usage",
@@ -383,10 +432,12 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 		),
 		discovery.UniqueID: id,
 	}
+
 	id = d.Origin.Name + "_memory_total"
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.Sensor,
 		discovery.Name:                 "Memory total",
@@ -401,10 +452,12 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 		discovery.UniqueID:             id,
 		discovery.EnabledByDefault:     false,
 	}
+
 	id = d.Origin.Name + "_memory_used"
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.Sensor,
 		discovery.Name:                 "Memory used",
@@ -419,10 +472,12 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 		discovery.UniqueID:             id,
 		discovery.EnabledByDefault:     false,
 	}
+
 	id = d.Origin.Name + "_memory_free"
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.Sensor,
 		discovery.Name:                 "Memory free",
@@ -437,10 +492,12 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 		discovery.UniqueID:             id,
 		discovery.EnabledByDefault:     false,
 	}
+
 	id = d.Origin.Name + "_memory_cached"
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.Sensor,
 		discovery.Name:                 "Memory cached",
@@ -455,11 +512,13 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 		discovery.UniqueID:             id,
 		discovery.EnabledByDefault:     false,
 	}
+
 	if m.includeSwap {
 		id = d.Origin.Name + "_memory_swap"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:                  discovery.Sensor,
 			discovery.Name:                      "Swap usage",
@@ -478,10 +537,12 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 			),
 			discovery.UniqueID: id,
 		}
+
 		id = d.Origin.Name + "_memory_swap_total"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 "Swap total",
@@ -496,10 +557,12 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 			discovery.UniqueID:             id,
 			discovery.EnabledByDefault:     false,
 		}
+
 		id = d.Origin.Name + "_memory_swap_used"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 "Swap used",
@@ -514,10 +577,12 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 			discovery.UniqueID:             id,
 			discovery.EnabledByDefault:     false,
 		}
+
 		id = d.Origin.Name + "_memory_swap_free"
 		if cmps != nil {
 			cmps = append(cmps, id)
 		}
+
 		d.Components[id] = discovery.Component{
 			discovery.Platform:             discovery.Sensor,
 			discovery.Name:                 "Swap free",
@@ -533,6 +598,7 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 			discovery.EnabledByDefault:     false,
 		}
 	}
+
 	if cmps != nil {
 		d.Nodes[m.Type()] = cmps
 	}
@@ -543,17 +609,22 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery) {
 	id := d.Origin.Name + "_net_" + name + "_rx"
 	avail := availabilityTemplate(n.Topic())
+
 	var cmps []string
+
 	if d.Nodes != nil {
 		node, ok := d.Nodes[n.Type()]
 		if !ok || node == nil {
 			node = make([]string, 0, 4)
 		}
+
 		cmps = node
 	}
+
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.Sensor,
 		discovery.Name:                 "Network " + name + " rx rate",
@@ -566,10 +637,12 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 		discovery.UnitOfMeasurement:    iface.rate,
 		discovery.UniqueID:             id,
 	}
+
 	id = id[:len(id)-2] + "tx"
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.Sensor,
 		discovery.Name:                 "Network " + name + " tx rate",
@@ -582,10 +655,12 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 		discovery.UnitOfMeasurement:    iface.rate,
 		discovery.UniqueID:             id,
 	}
+
 	id = d.Origin.Name + "_net_" + name + "_rx_bytes"
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.Sensor,
 		discovery.Name:                 "Network " + name + " rx bytes",
@@ -600,10 +675,12 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 		discovery.UniqueID:             id,
 		discovery.EnabledByDefault:     false,
 	}
+
 	id = d.Origin.Name + "_net_" + name + "_tx_bytes"
 	if cmps != nil {
 		cmps = append(cmps, id)
 	}
+
 	d.Components[id] = discovery.Component{
 		discovery.Platform:             discovery.Sensor,
 		discovery.Name:                 "Network " + name + " tx bytes",
@@ -618,6 +695,7 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 		discovery.UniqueID:             id,
 		discovery.EnabledByDefault:     false,
 	}
+
 	if cmps != nil {
 		d.Nodes[n.Type()] = cmps
 	}

@@ -71,3 +71,5 @@ const (
 	UnitOfMeasurement         Option = "unit_of_meas"
 	ValueTemplate             Option = "val_tpl"
 )
+
+const BaseTopic Option = "~"

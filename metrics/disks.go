@@ -65,10 +65,12 @@ func (d *Disks) newDisk(mnt *procfs.Mount, cfg *config.DiskConfig) *Disk {
 	} else {
 		disk.Name = filepath.Base(disk.Mnt)
 	}
+
 	if d.showIO || (cfg != nil && cfg.ShowIO) {
 		disk.BlockIO = sysfs.BlockStat(mnt)
 		disk.showIO = disk.BlockIO.IsValid()
 	}
+
 	return disk
 }
 
@@ -77,25 +79,31 @@ func (d *Disks) newDisk(mnt *procfs.Mount, cfg *config.DiskConfig) *Disk {
 // [ErrNotSupported] is returned.
 func NewDisks(cfg *config.Config) (*Disks, error) {
 	d := &Disks{cfg: &cfg.Disks}
+
 	if err := d.rescan(true); err != nil {
 		return nil, errNotSupported(d.Type(), err)
 	}
+
 	log.Info("Found disks", "count", len(d.disks))
+
 	if cfg.Disks.Interval > 0 {
 		d.interval = cfg.Disks.Interval
 	} else {
 		d.interval = cfg.Interval
 	}
+
 	if cfg.Disks.Topic != "" {
 		d.topic = cfg.Disks.Topic
-	} else if cfg.TopicPrefix != "" {
-		d.topic = cfg.TopicPrefix + "/metric/disks"
+	} else if cfg.BaseTopic != "" {
+		d.topic = cfg.BaseTopic + "/metric/disks"
 	} else {
 		d.topic = "mqttop/metric/disks"
 	}
+
 	if cfg.Disks.RescanInterval > 0 {
 		d.rescanInterval = cfg.Disks.RescanInterval
 	}
+
 	d.showIO = cfg.Disks.ShowIO
 
 	return d, nil
@@ -114,32 +122,42 @@ func (d *Disks) Topic() string {
 // SetInterval sets the update interval for the metric.
 func (dsk *Disks) SetInterval(d time.Duration) {
 	dsk.mu.Lock()
+
 	if dsk.tick != nil && d != dsk.interval {
 		dsk.tick.Reset(d)
 	}
+
 	dsk.interval = d
+
 	dsk.mu.Unlock()
 }
 
 func (d *Disks) loop(ctx context.Context) {
 	d.mu.Lock()
+
 	d.tick = time.NewTicker(d.interval)
+
 	if d.rescanInterval > 0 {
 		d.rescanTick = time.NewTicker(d.rescanInterval)
 	}
+
 	d.mu.Unlock()
 
 	defer d.tick.Stop()
+
 	var (
 		err     error
 		ch      chan error
 		rescanC <-chan time.Time
 	)
+
 	if d.rescanTick != nil {
 		rescanC = d.rescanTick.C
 		defer d.rescanTick.Stop()
 	}
+
 	defer close(d.ch)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -151,6 +169,7 @@ func (d *Disks) loop(ctx context.Context) {
 			} else {
 				log.Debug("disks updated", "err", err)
 			}
+
 			ch = d.ch
 		case <-rescanC:
 			err = d.Rescan()
@@ -164,16 +183,18 @@ func (d *Disks) loop(ctx context.Context) {
 				ch = d.ch
 				break
 			}
+
 			select {
 			case <-d.tick.C:
 				err = d.Update()
 				if err == ErrNoChange {
 					log.Debug("disks updated, no change")
+
 					err = nil
-					//break
 				} else {
 					log.Debug("disks updated", "err", err)
 				}
+
 				ch = d.ch
 			default:
 			}
@@ -190,11 +211,14 @@ func (d *Disks) Start(ctx context.Context) (err error) {
 		log.Warn("Disks interval is 0, not starting")
 		return
 	}
+
 	d.once.Do(func() {
 		ctx, d.stop = context.WithCancel(ctx)
 		d.ch = make(chan error)
+
 		go d.loop(ctx)
 	})
+
 	return
 }
 
@@ -203,51 +227,67 @@ func (d *Disks) rescan(firstRun bool) error {
 	if err != nil {
 		return err
 	}
+
 	log.Debug("procfs.MountInfo", "count", len(mnts))
+
 	if firstRun {
 		d.disks = make(map[string]*Disk, len(mnts))
 	}
+
 	var changed bool
+
 	for name, mnt := range mnts {
 		if d.cfg.Excluded(name) {
 			continue
 		}
+
 		if _, ok := d.disks[name]; !ok {
 			dcfg := d.cfg.ConfigFor(name)
 			disk := d.newDisk(mnt, dcfg)
+
 			if err := disk.Update(); err != nil {
 				log.Error("can't add disk", err, "path", disk.Mnt)
 				continue
 			}
+
 			if dcfg != nil && dcfg.SizeUnit != "" {
 				size, err := byteutil.ParseSize(dcfg.SizeUnit)
 				if err != nil {
 					size = byteutil.SizeOf(disk.total >> 2)
 				}
+
 				disk.size = size
 			} else {
 				disk.size = byteutil.SizeOf(disk.total >> 2)
 			}
+
 			if firstRun {
 				disk.used = 0
 			}
+
 			d.disks[name] = disk
 			changed = true
 		}
 	}
+
 	if firstRun {
 		return nil
 	}
+
 	for name := range d.disks {
 		if _, ok := mnts[name]; ok {
 			continue
 		}
+
 		delete(d.disks, name)
+
 		changed = true
 	}
+
 	if !changed {
 		return ErrNoChange
 	}
+
 	return nil
 }
 
@@ -255,6 +295,7 @@ func (d *Disks) rescan(firstRun bool) error {
 func (d *Disks) Rescan() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
 	return d.rescan(false)
 }
 
@@ -264,10 +305,13 @@ func (d *Disks) Rescan() error {
 func (d *Disks) Update() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
 	var group errgroup.Group
+
 	for name := range d.disks {
 		group.Go(d.disks[name].Update)
 	}
+
 	return group.Wait()
 }
 
@@ -283,9 +327,11 @@ func (d *Disks) Updated() <-chan error {
 // may not be restarted.
 func (d *Disks) Stop() {
 	d.mu.Lock()
+
 	if d.stop != nil {
 		d.stop()
 	}
+
 	d.mu.Unlock()
 }
 
@@ -299,19 +345,25 @@ func (d *Disks) Stop() {
 func (d *Disks) String() string {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
+
 	var b strings.Builder
+
 	first := true
+
 	for _, disk := range d.disks {
 		if !first {
 			b.WriteByte('\n')
 		}
+
 		b.WriteString(disk.Name)
 		b.Write([]byte{' ', '('})
 		b.WriteString(disk.Mnt)
 		b.Write([]byte{')', '\n', ' ', ' '})
 		byteutil.WriteSize(&b, disk.total, disk.size)
+
 		first = false
 	}
+
 	return b.String()
 }
 
@@ -319,11 +371,14 @@ func (d *Disks) String() string {
 // representation of d to b.
 func (d *Disks) AppendText(b []byte) ([]byte, error) {
 	b = append(b, '{')
+
 	first := true
+
 	for _, disk := range d.disks {
 		if !first {
 			b = append(b, ',', ' ')
 		}
+
 		b = append(b, '"')
 		b = append(b, disk.Name...)
 		b = append(b, "\": {\"mnt\": \""...)
@@ -334,26 +389,25 @@ func (d *Disks) AppendText(b []byte) ([]byte, error) {
 		b = byteutil.AppendSize(b, disk.free, disk.size)
 		b = append(b, ", \"used\": "...)
 		b = byteutil.AppendSize(b, disk.used, disk.size)
+
 		if disk.showIO {
 			b = append(b, ", \"reads\": "...)
 			b = strconv.AppendInt(b, disk.reads, 10)
 			b = append(b, ", \"writes\": "...)
 			b = strconv.AppendInt(b, disk.writes, 10)
 		}
+
 		b = append(b, '}')
+
 		first = false
 	}
+
 	return append(b, '}'), nil
 }
 
 // MarshalJSON implements [json.Marshaler] and is equivalent to [CPU.AppendText](nil).
 func (d *Disks) MarshalJSON() ([]byte, error) {
 	return d.AppendText(nil)
-}
-
-func (d *Disk) update(wg *sync.WaitGroup) error {
-	defer wg.Done()
-	return d.Update()
 }
 
 // Update forces the individual disk to update. The returned error will not
@@ -364,12 +418,15 @@ func (d *Disk) Update() (err error) {
 	if err != nil {
 		return
 	}
+
 	total := stat.Blocks * uint64(stat.Frsize)
 	free := stat.Bavail * uint64(stat.Frsize)
 	used := total - free
+
 	if d.used == used && d.free == free && d.total == total {
 		err = ErrNoChange
 	}
+
 	d.total = total
 	d.free = free
 	d.used = used
@@ -382,13 +439,17 @@ func (d *Disk) Update() (err error) {
 	if e != nil {
 		log.WarnError("Can't read block io", err, "mnt", d.Mnt)
 		d.showIO = false
+
 		return e
 	}
+
 	if err == ErrNoChange && d.reads == r && d.writes == w && d.ticks == t {
 		err = ErrNoChange
 	}
+
 	d.reads = r
 	d.writes = w
 	d.ticks = t
+
 	return
 }

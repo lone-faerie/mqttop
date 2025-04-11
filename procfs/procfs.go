@@ -64,9 +64,11 @@ func Mounts() (*File, error) {
 	if err == nil {
 		return f, err
 	}
+
 	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
 		f, err = file.Open(selfMountsPath)
 	}
+
 	return f, err
 }
 

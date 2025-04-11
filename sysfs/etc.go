@@ -24,21 +24,28 @@ func OSRelease() (name string, err error) {
 	if err != nil {
 		return "", err
 	}
+
 	defer f.Close()
+
 	var line []byte
+
 	for {
 		line, err = f.ReadLine()
 		if err == io.EOF {
 			break
 		}
+
 		if err != nil {
 			return "", err
 		}
+
 		if line, ok := bytes.CutPrefix(line, prettyNameKey); ok {
 			name = string(byteutil.TrimByte(line, '"'))
+
 			return
 		}
 	}
+
 	return
 }
 
@@ -47,10 +54,13 @@ func MachineID() ([]byte, error) {
 	id, err := file.ReadBytes(machineIDPath)
 	if err != nil {
 		clear(id)
+
 		return nil, err
 	}
+
 	h := sha256.New()
 	h.Write(id)
+
 	return h.Sum(nil), nil
 }
 

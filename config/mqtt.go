@@ -72,9 +72,9 @@ type DiscoveryConfig struct {
 	//	- "components"
 	//	- "nodes" (or "metrics")
 	// If Method is "device" then a single discovery payload will be used for all
-	// the components. If Method is "components" then a seperate discovery payload
+	// the components. If Method is "components" then a separate discovery payload
 	// will be used for each component. If Method is "nodes" or "metrics" then a
-	// seperate discovery payload will be used for all the components of each metric.
+	// separate discovery payload will be used for all the components of each metric.
 	Method string `yaml:"method"`
 	// DeviceName is the name of the device used for discovery. The default value
 	// is "MQTTop" and the special value "hostname" means the device name will be
@@ -130,29 +130,37 @@ func (cfg *MQTTConfig) ClientOptions() *mqtt.ClientOptions {
 	o.SetClientID(cfg.ClientID)
 	o.SetUsername(cfg.Username).SetPassword(cfg.Password)
 	o.SetResumeSubs(true)
+
 	if cfg.KeepAlive > 0 {
 		o.SetKeepAlive(cfg.KeepAlive)
 	}
+
 	if cfg.ReconnectInterval > 0 {
 		o.SetMaxReconnectInterval(cfg.ReconnectInterval)
 	}
+
 	if cfg.ConnectTimeout > 0 {
 		o.SetConnectTimeout(cfg.ConnectTimeout)
 	}
+
 	if cfg.PingTimeout > 0 {
 		o.SetPingTimeout(cfg.PingTimeout)
 	}
+
 	if cfg.WriteTimeout > 0 {
 		o.SetWriteTimeout(cfg.WriteTimeout)
 	}
+
 	if cfg.BirthWillEnabled {
 		o.SetWill(cfg.BirthWillTopic, "offline", 1, true)
 	}
+
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
 		o.SetTLSConfig(&tls.Config{
 			GetCertificate: cfg.getCertificate,
 		})
 	}
+
 	return o
 }
 
@@ -162,8 +170,10 @@ func (cfg *MQTTConfig) getCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate,
 		if err != nil {
 			return nil, err
 		}
+
 		cfg.tlsCert = &cert
 	}
+
 	return cfg.tlsCert, nil
 }
 

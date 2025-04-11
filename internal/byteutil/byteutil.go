@@ -20,13 +20,16 @@ func lower(c byte) byte {
 // all the bytes of b are numerical characters, and ignores any that aren't.
 func Btou(b []byte) uint64 {
 	var u uint64
+
 	for _, c := range b {
 		c -= '0'
 		if c > 9 {
 			continue
 		}
+
 		u = 10*u + uint64(c)
 	}
+
 	return u
 }
 
@@ -34,22 +37,28 @@ func Btou(b []byte) uint64 {
 // all the bytes of b are numerical characters, and ignores any that aren't.
 func Btoi(b []byte) int64 {
 	var neg bool
+
 loop:
 	for i, c := range b {
 		switch {
 		case c == '-':
 			neg = true
 			i++
+
 			fallthrough
 		case c >= '0' && c <= '9':
 			b = b[i:]
+
 			break loop
 		}
 	}
+
 	u := Btou(b)
+
 	if neg {
 		u = ^u + 1
 	}
+
 	return int64(u)
 }
 
@@ -62,14 +71,19 @@ loop:
 		case c == '0':
 			if i < len(b)-2 && b[i+1] == 'x' {
 				b = b[i+2:]
+
 				break loop
 			}
+
 		case ('0' <= c && c <= '9') || ('a' <= lower(c) && lower(c) <= 'f'):
 			b = b[i:]
+
 			break loop
 		}
 	}
+
 	var u uint64
+
 	for _, c := range b {
 		switch {
 		case '0' <= c && c <= '9':
@@ -79,8 +93,10 @@ loop:
 		default:
 			continue
 		}
+
 		u = (u << 4) + uint64(c)
 	}
+
 	return u
 }
 
@@ -92,8 +108,10 @@ func Field(b []byte) (key, val []byte) {
 	if i < 0 {
 		return b, nil
 	}
+
 	key = bytes.TrimSpace(b[:i])
 	val = b[i+1:]
+
 	return
 }
 
@@ -103,11 +121,14 @@ func Field(b []byte) (key, val []byte) {
 func Column(b []byte) (col, rest []byte) {
 	b = bytes.TrimSpace(b)
 	i := bytes.IndexByte(b, ' ')
+
 	if i < 0 {
 		return b, b[:0]
 	}
+
 	col = b[:i]
 	rest = bytes.TrimSpace(b[i+1:])
+
 	return
 }
 
@@ -115,7 +136,9 @@ func Column(b []byte) (col, rest []byte) {
 // space as a string
 func ColumnString(b []byte) (col string, rest []byte) {
 	var c []byte
+
 	c, rest = Column(b)
+
 	return string(c), rest
 }
 
@@ -123,20 +146,26 @@ func ColumnString(b []byte) (col string, rest []byte) {
 // columns parsed and the remainder of b.
 func Columns(b []byte, dst ...*[]byte) (n int, rest []byte) {
 	var col []byte
+
 	rest = b
+
 	for i := range dst {
 		col, rest = Column(rest)
+
 		if dst[i] != nil {
 			*dst[i] = col
 		}
+
 		n++
+
 		if len(rest) == 0 {
 			return
 		}
 	}
+
 	return
 }
- 
+
 // Equal returns [bytes.Equal](a, b)
 func Equal(a, b []byte) bool {
 	return bytes.Equal(a, b)
@@ -150,6 +179,7 @@ func ToLower(b []byte) []byte {
 			b[i] = c + ('a' - 'A')
 		}
 	}
+
 	return b
 }
 
@@ -160,61 +190,79 @@ func ToLower(b []byte) []byte {
 func AppendDecimal(b []byte, v int64, pow int) []byte {
 	n := len(b)
 	b = strconv.AppendInt(b, v, 10)
+
 	if pow == 0 {
 		return b
 	}
+
 	n = len(b) - n
+
 	var lpad, rpad int
+
 	if pow > n {
 		lpad = 1
 		rpad = pow - n
 	} else if pow == n {
 		lpad = 1
 	}
+
 	grow := lpad + rpad + 1
 	b = slices.Grow(b, grow)[:len(b)+grow]
 	n = len(b) - pow - 1 - lpad
+
 	copy(b[n+grow:], b[n:])
+
 	if lpad > 0 {
 		b[n] = '0'
 		n += lpad
 	}
+
 	b[n] = '.'
+
 	for i := n + 1; i < n+rpad+1; i++ {
 		b[i] = '0'
 	}
+
 	return b
 }
 
 // WriteDecimal writes the output of [AppendDecimal] to w.
 func WriteDecimal(w io.Writer, v int64, pow int) (n int, err error) {
 	var b []byte
+
 	switch buf := w.(type) {
 	case *bytes.Buffer:
 		b = buf.AvailableBuffer()
 	case *bufio.Writer:
 		b = buf.AvailableBuffer()
 	}
+
 	b = AppendDecimal(b, v, pow)
+
 	return w.Write(b)
 }
 
 // TrimByte returns the subslice of b with all leading and trailing
-// occurences of c sliced off.
+// occurrences of c sliced off.
 func TrimByte(b []byte, c byte) []byte {
 	var start, end int
+
 	for i := range b {
 		if b[i] != c {
 			start = i
+
 			break
 		}
 	}
+
 	for i := len(b) - 1; i >= start; i-- {
 		if b[i] != c {
 			end = i + 1
+
 			break
 		}
 	}
+
 	return b[start:end]
 }
 

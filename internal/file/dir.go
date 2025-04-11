@@ -31,12 +31,14 @@ func OpenDir(name string) (*Dir, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &Dir{f: f, opened: true}, nil
 }
 
 // Close closes the underlying [os.File] of d, rendering it unusable for I/O.
 func (d *Dir) Close() error {
 	d.opened = false
+
 	return d.f.Close()
 }
 
@@ -49,9 +51,12 @@ func (d *Dir) Reset() error {
 		if err != nil {
 			return err
 		}
+
 		d.f = newF
 	}
+
 	d.names = nil
+
 	return nil
 }
 
@@ -62,19 +67,17 @@ func (d *Dir) Name() string {
 	return d.f.Name()
 }
 
-func (d *Dir) read() ([]os.FileInfo, error) {
-	return d.f.Readdir(-1)
-}
-
 func (d *Dir) readNames(typ uint8) ([]string, error) {
 	if len(d.names) == 0 || d.namesType != typ {
 		names, err := d.f.Readdirnames(-1)
 		if err != nil {
 			return nil, err
 		}
+
 		d.names = names
 		d.namesType = typ
 	}
+
 	return d.names, nil
 }
 
@@ -93,19 +96,24 @@ func (d *Dir) ReadPaths() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	dirName := d.Name()
+
 	for i, name := range names {
 		names[i] = dirPath(dirName, name)
 	}
+
 	return names, nil
 }
 
 func dirSymlink(dirName, name string) string {
 	name = dirPath(dirName, name)
+
 	path, err := filepath.EvalSymlinks(name)
 	if err != nil {
 		return name
 	}
+
 	return path
 }
 
@@ -116,63 +124,74 @@ func (d *Dir) ReadSymlinks() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	dirName := d.Name()
+
 	for i, name := range names {
 		names[i] = dirSymlink(dirName, name)
 	}
+
 	return names, nil
 }
 
-// WalkNames reads the contents of the directory and perfroms fn on each name of files in the directory.
+// WalkNames reads the contents of the directory and performs fn on each name of files in the directory.
 // If fn returns a non-nil error, WalkNames stops and returns the error.
 func (d *Dir) WalkNames(fn func(string) error) error {
 	names, err := d.readNames(dirNames)
 	if err != nil {
 		return err
 	}
+
 	for i := range names {
 		if err = fn(names[i]); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-// WalkPaths reads the contents of the directory and perfroms fn on each path of files in the directory.
+// WalkPaths reads the contents of the directory and performs fn on each path of files in the directory.
 // If fn returns a non-nil error, WalkPaths stops and returns the error.
 func (d *Dir) WalkPaths(fn func(string) error) error {
 	names, err := d.ReadNames()
 	if err != nil {
 		return err
 	}
+
 	dirName := d.Name()
+
 	for _, name := range names {
 		name = dirPath(dirName, name)
 		if err = fn(name); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-// WalkSymlinks reads the contents of the directory and perfroms fn on each path of files in the directory
+// WalkSymlinks reads the contents of the directory and performs fn on each path of files in the directory
 // after following symlinks. If fn returns a non-nil error, WalkSymlinks stops and returns the error.
 func (d *Dir) WalkSymlinks(fn func(string) error) error {
 	names, err := d.ReadNames()
 	if err != nil {
 		return err
 	}
+
 	dirName := d.Name()
+
 	for _, name := range names {
 		name = dirSymlink(dirName, name)
 		if err = fn(name); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-// Walk reads the contents of the directory and perfroms fn on each file in the directory, passing the
+// Walk reads the contents of the directory and performs fn on each file in the directory, passing the
 // file name and if the file is a directory. If fn returns a non-nil error, WalkNames stops and returns
 // the error.
 func (d *Dir) Walk(fn func(string, bool) error) error {
@@ -180,17 +199,22 @@ func (d *Dir) Walk(fn func(string, bool) error) error {
 	if err != nil {
 		return err
 	}
+
 	dirName := d.Name()
+
 	for _, name := range names {
 		name = dirPath(dirName, name)
+
 		info, err := Stat(name)
 		if err != nil {
 			return err
 		}
+
 		if err = fn(name, info.IsDir()); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -200,11 +224,13 @@ func (d *Dir) Contains(name string) bool {
 	if err != nil {
 		return false
 	}
+
 	for i := range names {
 		if names[i] == name {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -214,11 +240,13 @@ func (d *Dir) ContainsFunc(fn func(string) bool) bool {
 	if err != nil {
 		return false
 	}
+
 	for i := range names {
 		if fn(names[i]) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -228,14 +256,17 @@ func (d *Dir) ContainsAll(name ...string) bool {
 	if err != nil {
 		return false
 	}
+
 	if len(names) < len(name) {
 		return false
 	}
+
 	for i := range name {
 		if !slices.Contains(names, name[i]) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -245,11 +276,13 @@ func (d *Dir) ContainsAllFunc(fn func(string) bool) bool {
 	if err != nil {
 		return false
 	}
+
 	for i := range names {
 		if !fn(names[i]) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -276,6 +309,7 @@ func (d *Dir) ReadBytes(name string) ([]byte, error) {
 // ReadString reads the named file in dir using syscalls and returns the contents as a string.
 func (d *Dir) ReadString(name string) (string, error) {
 	b, err := d.ReadBytes(name)
+
 	return unsafe.String(unsafe.SliceData(b), len(b)), err
 }
 

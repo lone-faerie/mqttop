@@ -14,7 +14,7 @@ import (
 
 const dir = "/run/secrets"
 
-// Prefix is the the prefix of a string to indicate it should
+// Prefix is the prefix of a string to indicate it should
 // be substituted with the secret value. For example:
 //
 //	"!secret foo" -> /run/secrets/foo
@@ -28,17 +28,23 @@ func CutPrefix(s string) (secret string, ok bool) {
 // Read returns the value of the secret file /run/secrets/<secret>
 func Read(secret string) (string, error) {
 	var buf [128]byte
+
 	secret = filepath.Join(dir, secret)
+
 	fd, err := unix.Open(secret, unix.O_RDONLY, 0)
 	if err != nil {
 		return "", err
 	}
+
 	defer unix.Close(fd)
+
 	n, err := unix.Read(fd, buf[:])
 	if err != nil {
 		return "", err
 	}
+
 	b := bytes.TrimSpace(buf[:n])
+
 	return unsafe.String(unsafe.SliceData(b), len(b)), nil
 }
 
@@ -49,5 +55,6 @@ func MustRead(secret, fallback string) string {
 	if err != nil {
 		return fallback
 	}
+
 	return s
 }

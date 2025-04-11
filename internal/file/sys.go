@@ -14,34 +14,39 @@ func sysRead(name string, b []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	n, err := unix.Read(fd, b)
 	if err != nil {
 		unix.Close(fd)
 		return nil, err
 	}
+
 	unix.Close(fd)
+
 	return bytes.TrimSpace(b[:n]), nil
 }
-
-const intBufSize = (10 << (^uint(0) >> 63)) + (2 >> (^uint(0) >> 63))
 
 // ReadUint reads the named file using syscalls and returns the contents parsed as a uint64.
 func ReadUint(name string) (uint64, error) {
 	var buf [21]byte
+
 	b, err := sysRead(name, buf[:])
 	if err != nil {
 		return 0, err
 	}
+
 	return byteutil.Btou(b), nil
 }
 
 // ReadInt reads the named file using syscalls and returns the contents parsed as a int64.
 func ReadInt(name string) (int64, error) {
 	var buf [21]byte
+
 	b, err := sysRead(name, buf[:])
 	if err != nil {
 		return 0, err
 	}
+
 	return byteutil.Btoi(b), nil
 }
 
@@ -63,6 +68,7 @@ func ReadString(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return unsafe.String(unsafe.SliceData(b), len(b)), nil
 }
 
@@ -73,7 +79,9 @@ func ReadLower(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	b = byteutil.ToLower(b)
+
 	return unsafe.String(unsafe.SliceData(b), len(b)), nil
 }
 
@@ -81,14 +89,18 @@ func ReadLower(name string) (string, error) {
 // of each file parsed as a int64.
 func ReadInts(name ...string) ([]int64, error) {
 	var buf [21]byte
+
 	ii := make([]int64, len(name))
+
 	for i := range name {
 		b, err := sysRead(name[i], buf[:])
 		if err != nil {
 			return ii[:i], err
 		}
+
 		ii[i] = byteutil.Btoi(b)
 	}
+
 	return ii, nil
 }
 
@@ -96,13 +108,17 @@ func ReadInts(name ...string) ([]int64, error) {
 // of each file parsed as a uint64.
 func ReadUints(name ...string) ([]uint64, error) {
 	var buf [21]byte
+
 	uu := make([]uint64, len(name))
+
 	for i := range name {
 		b, err := sysRead(name[i], buf[:])
 		if err != nil {
 			return uu[:i], err
 		}
+
 		uu[i] = byteutil.Btou(b)
 	}
+
 	return uu, nil
 }

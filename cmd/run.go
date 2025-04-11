@@ -30,7 +30,8 @@ import (
 
 // Flags for [RunCommand]
 var (
-	ConfigPath []string      // Path(s) to config file/directory (default is first of $MQTTOP_CONFIG_FILE, $XDG_CONFIG_HOME/mqttop.yaml, $HOME/.config/mqttop.yaml)
+	ConfigPath []string      // Path(s) to config file/directory (default is first of $MQTTOP_CONFIG_PATH, $XDG_CONFIG_HOME/mqttop.yaml, $HOME/.config/mqttop.yaml)
+	DataPath   string        // Path to data directory (default is first of $MQTTOP_DATA_PATH, $XDG_DATA_HOME/mqttop, $HOME/.local/share/mqttop)
 	Broker     string        // MQTT broker address
 	Port       int           // MQTT broker port
 	Username   string        // MQTT broker username
@@ -80,11 +81,13 @@ All of the flags, if specified, will override the equivalent values in the confi
 		if p, _ := cmd.Flags().GetString("pingback"); p != "" {
 			log.Info("Pingback", "val", p)
 		}
+
 		if Detach {
 			var code int
 			if err = runDetached(cmd, args); err != nil {
 				code = 1
 			}
+
 			return &ExitError{err, code}
 		}
 
@@ -93,17 +96,22 @@ All of the flags, if specified, will override the equivalent values in the confi
 			return
 		}
 
-		initConfig()
+		findConfig()
+		findData()
+
 		cfg, err = config.Load(ConfigPath...)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return
 		}
+
 		if err = flagsToConfig(cfg, cmd, args); err != nil {
 			return
 		}
+
 		log.Info("Config loaded")
 		setLogHandler(cfg, log.LevelDebug)
 		log.Debug("MQTT broker", "addr", cfg.MQTT.Broker)
+
 		return
 	},
 	RunE: runBridge,
@@ -122,9 +130,11 @@ func init() {
 	RunCommand.Flags().StringVar(&KeyFile, "key", "", "MQTT TLS private key file (PEM encoded)")
 	RunCommand.Flags().DurationVarP(&Interval, "interval", "i", 0, "Update interval")
 	RunCommand.Flags().StringVarP(&Discovery, "discovery", "D", "", "Discovery prefix, or 'disabled' to disable")
+	RunCommand.Flags().StringVar(&DataPath, "data", "", "Path to data directory")
 	RunCommand.Flags().StringVarP(&LogLevel, "log", "l", "", "Log level")
 	RunCommand.Flags().BoolVarP(&Detach, "detach", "d", false, "Run detached (in background)")
 	RunCommand.Flags().String("pingback", "", "Pingback (hidden)")
+
 	RunCommand.Flags().Lookup("pingback").Hidden = true
 
 	RunCommand.MarkFlagFilename("config", "yaml", "yml")
@@ -135,36 +145,20 @@ func init() {
 	RootCommand.AddCommand(RunCommand)
 }
 
-func initConfig() {
-	const defaultConfigFile = "mqttop.yaml"
-
-	if len(ConfigPath) > 0 {
-		return
-	}
-	cfgFile, ok := os.LookupEnv("MQTTOP_CONFIG_PATH")
-	if ok {
-		ConfigPath = strings.Split(cfgFile, ",")
-		return
-	}
-	if xdg, ok := os.LookupEnv("XDG_CONFIG_HOME"); ok {
-		ConfigPath = []string{filepath.Join(xdg, defaultConfigFile)}
-		return
-	}
-	home, err := os.UserHomeDir()
-	cobra.CheckErr(err)
-	ConfigPath = []string{filepath.Join(home, ".config", defaultConfigFile)}
-}
-
 func flagsToConfig(cfg *config.Config, cmd *cobra.Command, args []string) error {
 	if LogLevel != "" {
 		var level log.Level
+
 		if err := level.UnmarshalText([]byte(LogLevel)); err != nil {
 			return err
 		}
+
 		cfg.Log.Level = level
 	}
+
 	if Broker != "" {
 		var hasPort bool
+
 		if last := Broker[len(Broker)-1]; '0' <= last && last <= '9' {
 			for _, c := range Broker {
 				switch {
@@ -177,39 +171,50 @@ func flagsToConfig(cfg *config.Config, cmd *cobra.Command, args []string) error 
 				}
 			}
 		}
+
 		if !hasPort && Port >= 0 {
 			Broker += ":" + strconv.Itoa(Port)
 		}
+
 		cfg.MQTT.Broker = Broker
 	}
+
 	if Username != "" {
 		cfg.MQTT.Username = Username
 	}
+
 	if Password != "" {
 		cfg.MQTT.Password = Password
 	}
+
 	if CertFile != "" {
 		cfg.MQTT.CertFile = CertFile
 	}
+
 	if KeyFile != "" {
 		cfg.MQTT.KeyFile = KeyFile
 	}
+
 	if Interval > 0 {
 		cfg.SetInterval(Interval)
 	}
+
 	if Discovery == "disabled" {
 		cfg.Discovery.Enabled = false
 	} else if Discovery != "" {
 		cfg.Discovery.Prefix = Discovery
 	}
+
 	if len(args) > 0 {
 		cfg.SetMetrics(args...)
 	}
+
 	return nil
 }
 
 func setLogHandler(cfg *config.Config, minLevel log.Level) {
 	var w io.Writer
+
 	switch strings.ToLower(cfg.Log.Output) {
 	case "", "stderr":
 	case "stdout":
@@ -224,41 +229,48 @@ func setLogHandler(cfg *config.Config, minLevel log.Level) {
 				"Unable to open log file, deferring to stderr",
 				err,
 			)
+
 			return
 		}
+
 		w = f
+
 		AddCleanup(func() { f.Close() })
 	}
+
 	if cfg.Log.Level < minLevel {
 		cfg.Log.Level = minLevel
 	}
+
 	log.SetLogLevel(cfg.Log.Level)
+
 	switch strings.ToLower(cfg.Log.Format) {
 	case "json":
 		if w == nil {
 			w = os.Stderr
 		}
+
 		log.SetJSONHandler(w)
 	case "text":
 		if w == nil {
 			w = os.Stderr
 		}
+
 		log.SetTextHandler(w)
 	default:
 		if w != nil {
 			log.SetOutput(w)
 		}
 	}
-	return
 }
 
 // PrintBanner prints the banner to the given commands output.
 func PrintBanner(cmd *cobra.Command) error {
 	t := template.New("banner")
+
 	template.Must(t.Parse(BannerTemplate()))
-	w := cmd.OutOrStdout()
-	err := t.Execute(w, cmd.Root())
-	return err
+
+	return t.Execute(cmd.OutOrStdout(), cmd.Root())
 }
 
 // Adapted from https://github.com/caddyserver/caddy/blob/master/cmd/commandfuncs.go#L44
@@ -267,12 +279,14 @@ func runDetached(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	defer ln.Close()
 
 	c := exec.Command(os.Args[0], "--pingback", ln.Addr().String())
 	if errors.Is(c.Err, exec.ErrDot) {
 		c.Err = nil
 	}
+
 	c.Args = append(c.Args, os.Args[1:]...)
 	c.Args = slices.DeleteFunc(c.Args, func(s string) bool { return s == "-d" || s == "--detach" })
 
@@ -280,8 +294,6 @@ func runDetached(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	//c.Stdout = cmd.OutOrStdout()
-	//c.Stderr = cmd.ErrOrStderr()
 
 	expect := make([]byte, 32)
 	if _, err = rand.Read(expect); err != nil {
@@ -298,18 +310,21 @@ func runDetached(cmd *cobra.Command, args []string) error {
 	}
 
 	success, exit := make(chan struct{}), make(chan error)
+
 	go func() {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				break
 			}
+
 			if err = handlePingbackConn(conn, expect); err == nil {
 				close(success)
 				break
 			}
 		}
 	}()
+
 	go func() {
 		err := c.Wait()
 		exit <- err
@@ -321,18 +336,22 @@ func runDetached(cmd *cobra.Command, args []string) error {
 	case err := <-exit:
 		return err
 	}
+
 	return nil
 }
 
 func handlePingbackConn(conn net.Conn, expect []byte) error {
 	defer conn.Close()
+
 	confirmationBytes, err := io.ReadAll(io.LimitReader(conn, 32))
 	if err != nil {
 		return err
 	}
+
 	if !bytes.Equal(confirmationBytes, expect) {
 		return fmt.Errorf("wrong confirmation: %x", confirmationBytes)
 	}
+
 	return nil
 }
 
@@ -340,21 +359,28 @@ func getDiscovery(mm []metrics.Metric) (d *discovery.Discovery, migrate bool, er
 	if d, err = discovery.New(&cfg.Discovery); err != nil {
 		return
 	}
+
 	for _, m := range mm {
 		if dd, ok := m.(discovery.Discoverer); ok {
 			dd.Discover(d)
 		}
 	}
+
 	var old *discovery.Discovery
+
 	path := filepath.Join(filepath.Dir(ConfigPath[0]), "discovery.json")
 	old, err = discovery.Load(path)
+
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			err = nil
 		}
+
 		return
 	}
+
 	migrate = d.Diff(old)
+
 	return
 }
 
@@ -366,9 +392,10 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+
+	defer stop()
 	defer log.Info("Done")
 
 	m := metrics.New(cfg)
@@ -378,18 +405,22 @@ func runBridge(cmd *cobra.Command, args []string) error {
 		bridge.WithMetrics(m...),
 		bridge.WithLogLevel(cfg.MQTT.LogLevel),
 	}
+
 	if cfg.Discovery.Enabled {
 		d, migrate, err := getDiscovery(m)
 		if err == nil {
 			opts = append(opts, bridge.WithDiscovery(d, migrate))
+			defer d.Write(filepath.Join(DataPath, "discovery.json"))
 		}
 	}
 
 	b := bridge.New(cfg, opts...)
+
 	if err := b.Start(ctx); err != nil {
 		log.Error("Not connected.", err)
 		return &ExitError{err, 1}
 	}
+
 	log.Debug("Connected")
 
 	select {
@@ -400,6 +431,7 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	case <-ctx.Done():
 		return nil
 	}
+
 	cfg = nil
 
 	defer b.Stop()
@@ -409,12 +441,15 @@ func runBridge(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return &ExitError{err, 1}
 		}
+
 		conn, err := net.Dial("tcp", pingback)
 		if err != nil {
 			return &ExitError{err, 1}
 		}
+
 		_, err = conn.Write(confirmationBytes)
 		conn.Close()
+
 		if err != nil {
 			return &ExitError{err, 1}
 		}
@@ -425,5 +460,6 @@ func runBridge(cmd *cobra.Command, args []string) error {
 		log.Debug("Received signal")
 	case <-b.Done():
 	}
+
 	return nil
 }

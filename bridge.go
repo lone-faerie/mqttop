@@ -71,7 +71,7 @@ func NewWithClient(cfg *config.Config, c mqtt.Client) *Bridge {
 	return &Bridge{
 		client:       c,
 		m:            metrics.New(cfg),
-		topicPrefix:  cfg.TopicPrefix,
+		topicPrefix:  cfg.BaseTopic,
 		discoveryCfg: &cfg.Discovery,
 	}
 }

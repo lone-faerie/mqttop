@@ -36,32 +36,43 @@ func (r *MultiReader) openNext() (err error) {
 	if len(r.names) == 0 {
 		return io.EOF
 	}
+
 	var name string
+
 	for len(name) == 0 && len(r.names) > 0 {
 		name = r.names[0]
 		r.names = r.names[1:]
 	}
+
 	if len(name) == 0 {
 		return io.EOF
 	}
+
 	f, err := os.Open(name)
 	if err != nil {
 		return
 	}
+
 	names, err := f.Readdirnames(-1)
 	if errors.Is(err, syscall.ENOTDIR) {
 		if len(r.extensions) > 0 && !slices.Contains(r.extensions, filepath.Ext(name)) {
 			f.Close()
 			return r.openNext()
 		}
+
 		r.f = f
+
 		log.Debug("file.MultiReader opened", "file", name)
+
 		return nil
 	}
+
 	if err != nil && err != io.EOF {
 		f.Close()
+
 		return err
 	}
+
 	for i := range names {
 		switch names[i] {
 		case "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml":
@@ -70,8 +81,11 @@ func (r *MultiReader) openNext() (err error) {
 			names[i] = filepath.Join(name, names[i])
 		}
 	}
+
 	r.names = append(names, r.names...)
+
 	f.Close()
+
 	return r.openNext()
 }
 
@@ -88,14 +102,17 @@ func (r *MultiReader) Read(p []byte) (n int, err error) {
 			return
 		}
 	}
+
 	n, err = r.f.Read(p)
 	if err == io.EOF {
 		if len(r.names) > 0 {
 			err = nil
 		}
+
 		r.f.Close()
 		r.f = nil
 	}
+
 	return
 }
 
@@ -104,5 +121,6 @@ func (r *MultiReader) Close() (err error) {
 	if r.f != nil {
 		err = r.f.Close()
 	}
+
 	return
 }

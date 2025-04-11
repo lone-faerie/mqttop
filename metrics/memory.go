@@ -46,6 +46,7 @@ type Memory struct {
 // is returned.
 func NewMemory(cfg *config.Config) (*Memory, error) {
 	m := &Memory{includeSwap: cfg.Memory.IncludeSwap}
+
 	if err := m.parseInfo(); err != nil {
 		return nil, errNotSupported(m.Type(), err)
 	}
@@ -65,8 +66,8 @@ func NewMemory(cfg *config.Config) (*Memory, error) {
 
 	if cfg.Memory.Topic != "" {
 		m.topic = cfg.Memory.Topic
-	} else if cfg.TopicPrefix != "" {
-		m.topic = cfg.TopicPrefix + "/metric/memory"
+	} else if cfg.BaseTopic != "" {
+		m.topic = cfg.BaseTopic + "/metric/memory"
 	} else {
 		m.topic = "mqttop/metric/memory"
 	}
@@ -84,34 +85,45 @@ func (m *Memory) parseInfo() error {
 	if err != nil {
 		return err
 	}
+
 	defer info.Close()
+
 	var includeSwap bool
+
 	for {
 		line, err := info.ReadLine()
 		if err == io.EOF {
 			break
 		}
+
 		if err != nil {
 			return err
 		}
+
 		key, val := byteutil.Field(line)
+
 		if byteutil.Equal(key, totalKey) {
-			m.total = uint64(byteutil.Btou(val)) << 10
+			m.total = byteutil.Btou(val) << 10
 			m.size = byteutil.SizeOf(m.total)
+
 			if m.swapTotal > 0 {
 				break
 			}
 		}
+
 		if byteutil.Equal(key, swapKey) {
 			includeSwap = true
 			m.swapTotal = uint64(byteutil.Btoi(val)) << 10
 			m.swapSize = byteutil.SizeOf(m.swapTotal)
+
 			if m.total > 0 {
 				break
 			}
 		}
 	}
+
 	m.includeSwap = m.includeSwap && includeSwap
+
 	return nil
 }
 
@@ -128,10 +140,13 @@ func (m *Memory) Topic() string {
 // SetInterval sets the update interval for the metric.
 func (m *Memory) SetInterval(d time.Duration) {
 	m.mu.Lock()
+
 	if m.tick != nil && d != m.interval {
 		m.tick.Reset(d)
 	}
+
 	m.interval = d
+
 	m.mu.Unlock()
 }
 
@@ -142,17 +157,21 @@ func (m *Memory) loop(ctx context.Context) {
 
 	defer m.tick.Stop()
 	defer close(m.ch)
+
 	var (
 		err error
 		ch  chan error
 	)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-m.tick.C:
 			err = m.Update()
+
 			log.Debug("memory updated")
+
 			ch = m.ch
 		case ch <- err:
 			ch = nil
@@ -167,11 +186,14 @@ func (m *Memory) Start(ctx context.Context) (err error) {
 		log.Warn("Memory interval is 0, not starting")
 		return
 	}
+
 	m.once.Do(func() {
 		ctx, m.stop = context.WithCancel(ctx)
 		m.ch = make(chan error)
+
 		go m.loop(ctx)
 	})
+
 	return
 }
 
@@ -181,53 +203,65 @@ func (m *Memory) Start(ctx context.Context) (err error) {
 func (m *Memory) Update() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	info, err := procfs.MemInfo()
 	if err != nil {
 		return err
 	}
+
 	defer info.Close()
+
 	var gotAvailable bool
+
 	for {
 		line, err := info.ReadLine()
 		if err == io.EOF {
 			break
 		}
+
 		if err != nil {
 			return err
 		}
+
 		key, val := byteutil.Field(line)
+
 		if len(key) > 0 && key[0] == 'D' {
 			break
 		}
+
 		switch string(key) {
 		case "MemFree":
-			m.free = uint64(byteutil.Btou(val)) << 10
+			m.free = byteutil.Btou(val) << 10
 		case "MemAvailable":
-			m.avail = uint64(byteutil.Btou(val)) << 10
+			m.avail = byteutil.Btou(val) << 10
 			gotAvailable = true
 		case "Cached":
-			m.cached = uint64(byteutil.Btou(val)) << 10
+			m.cached = byteutil.Btou(val) << 10
 		case "SwapTotal":
 			if m.includeSwap {
-				m.swapTotal = uint64(byteutil.Btou(val)) << 10
+				m.swapTotal = byteutil.Btou(val) << 10
 			}
 		case "SwapFree":
 			if m.includeSwap {
-				m.swapFree = uint64(byteutil.Btou(val)) << 10
+				m.swapFree = byteutil.Btou(val) << 10
 			}
 		}
 	}
+
 	if !gotAvailable {
 		m.avail = m.free + m.cached
 	}
+
 	if m.avail > m.total {
 		m.used = m.total - m.free
 	} else {
 		m.used = m.total - m.avail
 	}
+
 	if m.swapTotal > 0 {
 		m.swapUsed = m.swapTotal - m.swapFree
 	}
+
 	return nil
 }
 
@@ -242,9 +276,11 @@ func (m *Memory) Updated() <-chan error {
 // may not be restarted.
 func (m *Memory) Stop() {
 	m.mu.Lock()
+
 	if m.stop != nil {
 		m.stop()
 	}
+
 	m.mu.Unlock()
 }
 
@@ -253,8 +289,11 @@ func (m *Memory) Stop() {
 func (m *Memory) String() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	var b strings.Builder
+
 	byteutil.WriteSize(&b, m.total, m.size)
+
 	return b.String()
 }
 
@@ -263,6 +302,7 @@ func (m *Memory) String() string {
 func (m *Memory) AppendText(b []byte) ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	b = append(b, "{\"total\": "...)
 	b = byteutil.AppendSize(b, m.total, m.size)
 	b = append(b, ", \"used\": "...)
@@ -273,6 +313,7 @@ func (m *Memory) AppendText(b []byte) ([]byte, error) {
 	b = byteutil.AppendSize(b, m.cached, m.size)
 	b = append(b, ", \"free\": "...)
 	b = byteutil.AppendSize(b, m.free, m.size)
+
 	if m.swapTotal > 0 {
 		b = append(b, ", \"swapTotal\": "...)
 		b = byteutil.AppendSize(b, m.swapTotal, m.swapSize)
@@ -281,6 +322,7 @@ func (m *Memory) AppendText(b []byte) ([]byte, error) {
 		b = append(b, ", \"swapFree\": "...)
 		b = byteutil.AppendSize(b, m.swapFree, m.swapSize)
 	}
+
 	return append(b, '}'), nil
 }
 

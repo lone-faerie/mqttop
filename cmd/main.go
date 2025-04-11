@@ -3,9 +3,58 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/lone-faerie/mqttop/internal/build"
+	"github.com/spf13/cobra"
 )
+
+func findConfig() {
+	const defaultConfigFile = "mqttop.yaml"
+
+	if len(ConfigPath) > 0 {
+		return
+	}
+
+	if env, ok := os.LookupEnv("MQTTOP_CONFIG_PATH"); ok {
+		ConfigPath = strings.Split(env, ",")
+		return
+	}
+
+	if xdg, ok := os.LookupEnv("XDG_CONFIG_HOME"); ok {
+		ConfigPath = []string{filepath.Join(xdg, defaultConfigFile)}
+		return
+	}
+
+	home, err := os.UserHomeDir()
+	cobra.CheckErr(err)
+
+	ConfigPath = []string{filepath.Join(home, ".config", defaultConfigFile)}
+}
+
+func findData() {
+	const defaultDataDir = "mqttop"
+
+	if DataPath != "" {
+		return
+	}
+
+	if env, ok := os.LookupEnv("MQTTOP_DATA_PATH"); ok {
+		DataPath = env
+		return
+	}
+
+	if xdg, ok := os.LookupEnv("XDG_DATA_HOME"); ok {
+		DataPath = filepath.Join(xdg, defaultDataDir)
+		return
+	}
+
+	home, err := os.UserHomeDir()
+	cobra.CheckErr(err)
+
+	DataPath = filepath.Join(home, ".local", "share", defaultDataDir)
+}
 
 const banner = `┌────────────────────────────────────────────────────────────┐
 │                                                            │
@@ -47,6 +96,7 @@ func main() {
 		if exit, ok := err.(*ExitError); ok {
 			os.Exit(exit.Code)
 		}
+
 		c.PrintErrln("Error:", err)
 		c.Usage()
 	}

@@ -15,10 +15,9 @@ type Origin struct {
 //   - SWVersion: [build.Version]
 //   - SupportURL: "https://github.com/lone-faerie/mqttop"
 func NewOrigin() *Origin {
-	o := &Origin{
+	return &Origin{
 		Name:       "mqttop",
 		SWVersion:  build.Version(),
 		SupportURL: "https://" + build.Package(),
 	}
-	return o
 }
