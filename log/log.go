@@ -100,6 +100,15 @@ func Printf(format string, v ...any) {
 	defaultLogger.Info(fmt.Sprintf(format, v...))
 }
 
+// Errof is equivalent to [Error] with a message of [fmt.Sprintf](format, v...).
+func Errorf(format string, v ...any) {
+	defaultLogger.Error(fmt.Sprintf(format, v...))
+}
+
+func PrintErr(err error) {
+	defaultLogger.Error(err.Error())
+}
+
 func (l *logger) Println(v ...any) {
 	l.Info(fmt.Sprintln(v...))
 }

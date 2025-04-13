@@ -52,3 +52,11 @@ func sysOpen(name string) (int, error) {
 
 	return unix.Open(name, unix.O_RDONLY, 0)
 }
+
+// SetRoot sets the root directory to open files in. Only used during testing.
+//
+// If the environment variable $MQTTOP_ROOTFS_PATH is set, this is automatically
+// handled on init.
+func SetRoot(s string) {
+	root = s
+}

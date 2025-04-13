@@ -253,7 +253,6 @@ func setInterval(v reflect.Value, d time.Duration) {
 	case reflect.Struct:
 		if f := v.FieldByName("Interval"); f.IsValid() && f.Kind() == reflect.Int64 {
 			f.SetInt(int64(d))
-			return
 		}
 
 		n := v.NumField()

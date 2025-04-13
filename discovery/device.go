@@ -71,11 +71,7 @@ func NewDevice() (*Device, error) {
 	if vendor, err := dmiVendor(dmi); err == nil {
 		d.Manufacturer = vendor
 	}
-	/*
-		if version, err := dmiVersion(dmi); err == nil {
-			d.HWVersion = version
-		}
-	*/
+
 	dmi.Close()
 
 	return d, nil
@@ -103,16 +99,4 @@ func dmiVendor(d *sysfs.Dir) (vendor string, err error) {
 	}
 
 	return d.ReadString("board_vendor")
-}
-
-func dmiVersion(d *sysfs.Dir) (version string, err error) {
-	if version, err = d.ReadString("product_version"); err == nil {
-		return
-	}
-
-	if version, err = d.ReadString("chasis_version"); err == nil {
-		return
-	}
-
-	return d.ReadString("board_version")
 }

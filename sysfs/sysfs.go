@@ -62,6 +62,10 @@ func CPU() (*Dir, error) {
 	return file.OpenDir(cpuDevicesPath)
 }
 
+func Net() (*Dir, error) {
+	return file.OpenDir(netClassPath)
+}
+
 // NetDevice returns the directory /sys/class/net/<iface>
 func NetDevice(iface string) (*Dir, error) {
 	return file.OpenDir(netClassPath + file.Separator + iface)

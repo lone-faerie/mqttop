@@ -1,12 +1,17 @@
-package main
+package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"text/template"
 
+	"github.com/lone-faerie/mqttop/config"
 	"github.com/lone-faerie/mqttop/internal/build"
+	"github.com/lone-faerie/mqttop/log"
 	"github.com/spf13/cobra"
 )
 
@@ -78,6 +83,15 @@ func BannerTemplate() string {
 	return fmt.Sprintf(banner, build.BuildTime())
 }
 
+// PrintBanner prints the banner to the given commands output.
+func PrintBanner(cmd *cobra.Command) error {
+	t := template.New("banner")
+
+	template.Must(t.Parse(BannerTemplate()))
+
+	return t.Execute(cmd.OutOrStdout(), cmd.Root())
+}
+
 const fullDocsFooter = `Full documentation is available at:
 https://pkg.go.dev/github.com/lone-faerie/mqttop`
 
@@ -91,13 +105,125 @@ func (e *ExitError) Error() string {
 	return e.Err.Error()
 }
 
-func main() {
-	if c, err := RootCommand.ExecuteC(); err != nil {
-		if exit, ok := err.(*ExitError); ok {
-			os.Exit(exit.Code)
+func maybeWithPort(addr string, port int) string {
+	var hasPort bool
+
+	if last := addr[len(addr)-1]; '0' <= last && last <= '9' {
+		for _, c := range addr {
+			switch {
+			case c == ':':
+				hasPort = true
+			case '0' <= c && c <= '9':
+				hasPort = hasPort && true
+			default:
+				hasPort = false
+			}
+		}
+	}
+
+	if hasPort || port < 0 {
+		return addr
+	}
+
+	return addr + ":" + strconv.Itoa(port)
+}
+
+func flagsToConfig(cfg *config.Config, args []string) error {
+	if LogLevel != "" {
+		var level log.Level
+
+		if err := level.UnmarshalText([]byte(LogLevel)); err != nil {
+			return err
 		}
 
-		c.PrintErrln("Error:", err)
-		c.Usage()
+		cfg.Log.Level = level
+	}
+
+	if Broker != "" {
+		cfg.MQTT.Broker = maybeWithPort(Broker, Port)
+	}
+
+	if Username != "" {
+		cfg.MQTT.Username = Username
+	}
+
+	if Password != "" {
+		cfg.MQTT.Password = Password
+	}
+
+	if CertFile != "" {
+		cfg.MQTT.CertFile = CertFile
+	}
+
+	if KeyFile != "" {
+		cfg.MQTT.KeyFile = KeyFile
+	}
+
+	if Interval > 0 {
+		cfg.SetInterval(Interval)
+	}
+
+	if Discovery == "disabled" {
+		cfg.Discovery.Enabled = false
+	} else if Discovery != "" {
+		cfg.Discovery.Prefix = Discovery
+	}
+
+	if len(args) > 0 {
+		cfg.SetMetrics(args...)
+	}
+
+	return nil
+}
+
+func setLogHandler(cfg *config.Config, minLevel log.Level) {
+	var w io.Writer
+
+	switch strings.ToLower(cfg.Log.Output) {
+	case "", "stderr":
+	case "stdout":
+		w = os.Stdout
+	case "discard":
+		log.SetHandler(log.DiscardHandler)
+		return
+	default:
+		f, err := os.Open(cfg.Log.Output)
+		if err != nil {
+			log.Error(
+				"Unable to open log file, deferring to stderr",
+				err,
+			)
+
+			return
+		}
+
+		w = f
+
+		AddCleanup(func() { f.Close() })
+	}
+
+	if cfg.Log.Level < minLevel {
+		cfg.Log.Level = minLevel
+	}
+
+	log.SetLogLevel(cfg.Log.Level)
+
+	switch strings.ToLower(cfg.Log.Format) {
+	case "json":
+		if w == nil {
+			w = os.Stderr
+		}
+
+		log.SetJSONHandler(w)
+	case "text":
+		if w == nil {
+			w = os.Stderr
+		}
+
+		log.SetTextHandler(w)
+	default:
+		if w != nil {
+			log.SetOutput(w)
+		}
 	}
 }

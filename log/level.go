@@ -36,6 +36,7 @@ type Level slog.Level
 // does not. But those OpenTelemetry levels can still be represented as slog
 // Levels by using the appropriate integers.
 const (
+	LevelTrace    = Level(-1 << 31)
 	LevelDebug    = Level(slog.LevelDebug)
 	LevelInfo     = Level(slog.LevelInfo)
 	LevelWarn     = Level(slog.LevelWarn)
@@ -52,6 +53,9 @@ const (
 //
 //	LevelWarn.String() => "WARN"
 func (l Level) String() string {
+	if l <= LevelTrace {
+		return "TRACE"
+	}
 	if l >= LevelDisabled {
 		return "DISABLED"
 	}
@@ -80,6 +84,8 @@ func (l *Level) UnmarshalJSON(data []byte) error {
 	}
 
 	switch strings.ToLower(s) {
+	case "trace":
+		*l = LevelTrace
 	case "disable", "disabled", "false":
 		*l = LevelDisabled
 	default:
@@ -108,6 +114,8 @@ func (l Level) MarshalText() ([]byte, error) {
 // output. For example, "Error-8" would marshal as "INFO".
 func (l *Level) UnmarshalText(data []byte) (err error) {
 	switch string(bytes.ToLower(data)) {
+	case "trace":
+		*l = LevelTrace
 	case "disable", "disabled", "false":
 		*l = LevelDisabled
 	default:

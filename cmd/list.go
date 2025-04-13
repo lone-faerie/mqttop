@@ -1,6 +1,7 @@
-package main
+package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"io"
 	"slices"
@@ -13,40 +14,66 @@ import (
 	"github.com/lone-faerie/mqttop/metrics"
 )
 
-// Flags for [ListCommand]
+// Flags for mqttop list
 var (
 	ListSummary bool // Display a summary of available metrics
 )
 
-// ListCommand is the [cobra.Command] used for listing available metrics.
-var ListCommand = &cobra.Command{
-	Use:     "list",
-	Aliases: []string{"l"},
-	Short:   "List available metrics",
-	Long: `List available metrics.
+//go:embed help/list.md
+var listHelp string
 
-If --config is specified, the config will be used to determine which metrics to include.
+// NewCmdList returns the [cobra.Command] used for listing available metrics.
+//
+// If --config is specified, the config will be used to determine which metrics to include.
+//
+// If --summary is specified, the list will be a comma-separated list of metric types. Otherwise, the metrics will be printed with some basic information, i.e. CPU name, total memory, etc.
+//
+// Usage:
+//
+//	mqttop list [flags]
+//
+// Aliases:
+//
+//	list, l
+//
+// Flags:
+//
+//	-c, --config strings   Path(s) to config file/directory
+//	-s, --summary          Display a summary of available metrics
+//	-h, --help             help for list
+func NewCmdList() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "list",
+		Aliases: []string{"l"},
+		Short:   "List available metrics",
+		Long:    listHelp,
+		ValidArgs: []cobra.Completion{
+			cobra.CompletionWithDesc("all", "all metrics"),
+			"cpu", "memory", "disks", "net", "battery", "dirs", "gpu",
+		},
+		Args: cobra.OnlyValidArgs,
+		RunE: listMetrics,
+	}
 
-If --summary is specified, the list will be a comma-separated list of metric types. Otherwise, the metrics will be printed with some basic information, i.e. CPU name, total memory, etc.`,
-	ValidArgs: []cobra.Completion{
-		cobra.CompletionWithDesc("all", "all metrics"),
-		"cpu", "memory", "disks", "net", "battery", "dirs", "gpu",
-	},
-	Args: cobra.OnlyValidArgs,
-	RunE: listMetrics,
+	cmd.Flags().SortFlags = false
+	cmd.Flags().StringSliceVarP(&ConfigPath, "config", "c", nil, "Path(s) to config file/directory")
+	cmd.Flags().BoolVarP(&ListSummary, "summary", "s", false, "Display a summary of available metrics")
+
+	cmd.MarkFlagFilename("config", "yaml", "yml")
+	cmd.MarkFlagDirname("config")
+
+	cmd.SetHelpTemplate(cmd.HelpTemplate() + "\n" + fullDocsFooter + "\n")
+
+	return cmd
 }
 
-func init() {
-	ListCommand.Flags().SortFlags = false
-	ListCommand.Flags().StringSliceVarP(&ConfigPath, "config", "c", nil, "Path(s) to config file/directory")
-	ListCommand.Flags().BoolVarP(&ListSummary, "summary", "s", false, "Display a summary of available metrics")
+type byteWriter struct {
+	w io.Writer
+}
 
-	ListCommand.MarkFlagFilename("config", "yaml", "yml")
-	ListCommand.MarkFlagDirname("config")
-
-	ListCommand.SetHelpTemplate(ListCommand.HelpTemplate() + "\n" + fullDocsFooter + "\n")
-
-	RootCommand.AddCommand(ListCommand)
+func (w *byteWriter) WriteByte(c byte) error {
+	_, err := w.w.Write([]byte{c})
+	return err
 }
 
 func printMetrics(w io.Writer, mm []metrics.Metric, args []string) {
@@ -95,6 +122,10 @@ func listMetrics(cmd *cobra.Command, args []string) (err error) {
 		setLogHandler(cfg, log.LevelWarn)
 	} else {
 		cfg = config.Default()
+	}
+
+	if len(args) > 0 {
+		cfg.SetMetrics(args...)
 	}
 
 	mm := metrics.New(cfg)

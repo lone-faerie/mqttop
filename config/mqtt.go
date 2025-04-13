@@ -126,7 +126,9 @@ var DefaultDiscovery = DiscoveryConfig{
 // the backing MQTT client when calling [mqtt.NewClient].
 func (cfg *MQTTConfig) ClientOptions() *mqtt.ClientOptions {
 	o := mqtt.NewClientOptions()
-	o.AddBroker(cfg.Broker)
+	if cfg.Broker != "" {
+		o.AddBroker(cfg.Broker)
+	}
 	o.SetClientID(cfg.ClientID)
 	o.SetUsername(cfg.Username).SetPassword(cfg.Password)
 	o.SetResumeSubs(true)

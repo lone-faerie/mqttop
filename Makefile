@@ -29,7 +29,7 @@ clean: ## Clean output directory
 	rm -f ${BIN_OUT_DIR}/*
 
 build: ## Build binary
-	go build ${GO_BUILD_FLAGS} -o ${BIN_PATH} ./cmd
+	go build ${GO_BUILD_FLAGS} -o ${BIN_PATH} .
 
 install: clean build ## Build and install binary
 	sudo cp ${BIN_PATH} /usr/local/bin/mqttop
@@ -44,13 +44,13 @@ install: clean build ## Build and install binary
 	fi
 
 debug: ## Build binary with 'debug' tag
-	go build -tags $(subst $(space),$(comma),$(strip $(GO_BUILD_TAGS) debug)) -ldflags="${LDFLAGS}" -o ${BIN_PATH} ./cmd
+	go build -tags $(subst $(space),$(comma),$(strip $(GO_BUILD_TAGS) debug)) -ldflags="${LDFLAGS}" -o ${BIN_PATH} ./
 
 cover: ## Build binary for coverage
-	go build -cover ${GO_BUILD_FLAGS} -o ${BIN_PATH} ./cmd
+	go build -cover ${GO_BUILD_FLAGS} -o ${BIN_PATH} .
 
 run: ## Build and run binary
-	go run ${GO_BUILD_FLAGS} ./cmd
+	go run ${GO_BUILD_FLAGS} .
 
 docker: docker-build docker-build-gpu ## Build both docker images
 
@@ -78,3 +78,14 @@ docker-debug-gpu:
 		--tag mqttop:development-gpu \
 		-f Dockerfile.gpu \
 		.
+
+# From https://github.com/prometheus/procfs
+%/.unpacked: %.ttar
+	@echo ">> extracting fixtures $*"
+	./ttar -C $(dir $*) -x -f $*.ttar
+	touch $@
+
+# From https://github.com/prometheus/procfs
+update_fixtures:
+	rm -vf testdata/fixtures/.unpacked
+	./ttar -c -f testdata/fixtures.ttar -C testdata/ fixtures/
