@@ -4,3 +4,5 @@ bin/*
 .github/*
 .git
 .git/*
+/testdata/fixtures/
+/fixtures
