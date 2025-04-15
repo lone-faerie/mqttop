@@ -291,8 +291,10 @@ func (cfg *Config) SetMetrics(name ...string) {
 	}
 }
 
+var customTemplateFuncs map[string]any
+
 func templateFuncs() map[string]any {
-	return map[string]any{
+	m := map[string]any{
 		"cut": func(s, sep string) string {
 			a, b, _ := strings.Cut(s, sep)
 			return a + b
@@ -305,6 +307,12 @@ func templateFuncs() map[string]any {
 		"toupper":   strings.ToUpper,
 		"trim":      strings.TrimSpace,
 	}
+
+	for name, fn := range customTemplateFuncs {
+		m[name] = fn
+	}
+
+	return m
 }
 
 func loadTemplate(name, text string) (*template.Template, error) {
@@ -312,4 +320,15 @@ func loadTemplate(name, text string) (*template.Template, error) {
 	t.Funcs(templateFuncs())
 
 	return t.Parse(text)
+}
+
+type nameStruct struct {
+	Name string
+}
+
+func AddTemplateFunc(name string, f any) {
+	if customTemplateFuncs == nil {
+		customTemplateFuncs = make(map[string]any)
+	}
+	customTemplateFuncs[name] = f
 }

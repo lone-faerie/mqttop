@@ -21,6 +21,7 @@ import (
 type NetInterface struct {
 	name   string
 	ip     netip.Addr
+	flags  uint16
 	rx     uint64
 	tx     uint64
 	rxRate uint64
@@ -30,10 +31,11 @@ type NetInterface struct {
 	rate   byteutil.ByteRate
 
 	lastUpdate time.Time
+	sockfd     int
 }
 
 func (iface *NetInterface) Running() bool {
-	return true
+	return iface.flags&unix.IFF_RUNNING != 0
 }
 
 type Net struct {
@@ -82,20 +84,31 @@ func NewNet(cfg *config.Config) (*Net, error) {
 }
 
 func getAddr4(sock int, ifname string) (addr netip.Addr, err error) {
-	log.Debug("Get IP address", "interface", ifname)
 	i, err := unix.NewIfreq(ifname)
 	if err != nil {
 		return
 	}
-	if err = unix.IoctlIfreq(sock, unix.SIOCGIFADDR, i); err != nil {
+	return getAddr4Ifreq(sock, i)
+}
+
+func getAddr4Ifreq(sock int, ifreq *unix.Ifreq) (addr netip.Addr, err error) {
+	if err = unix.IoctlIfreq(sock, unix.SIOCGIFADDR, ifreq); err != nil {
 		return
 	}
-	a, err := i.Inet4Addr()
+	in4, err := ifreq.Inet4Addr()
 	if err != nil {
 		return
 	}
-	addr = netip.AddrFrom4([4]byte(a))
-	log.Debug("Got IP address", "addr", addr)
+	addr = netip.AddrFrom4([4]byte(in4))
+	return
+}
+
+func getFlagsIfreq(sock int, ifreq *unix.Ifreq) (flags uint16, err error) {
+	ifreq.SetUint16(0)
+	if err = unix.IoctlIfreq(sock, unix.SIOCGIFFLAGS, ifreq); err != nil {
+		return
+	}
+	flags = ifreq.Uint16()
 	return
 }
 
@@ -356,10 +369,16 @@ func (n *Net) Update() error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	sock, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM, 0)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(sock)
+
 	var group errgroup.Group
 
-	for name, iface := range n.interfaces {
-		log.Debug("Updating interface", "name", name)
+	for _, iface := range n.interfaces {
+		iface.sockfd = sock
 		group.Go(iface.Update)
 	}
 
@@ -469,6 +488,27 @@ func (n *Net) MarshalJSON() ([]byte, error) {
 // error will not be sent on the channel returned by [Net.Updated] unlike
 // updates that happen automatically every update interval.
 func (iface *NetInterface) Update() error {
+	if iface.sockfd != 0 {
+		defer func() { iface.sockfd = 0 }()
+
+		ifreq, err := unix.NewIfreq(iface.name)
+		if err != nil {
+			return err
+		}
+
+		ip, err := getAddr4Ifreq(iface.sockfd, ifreq)
+		if err != nil {
+			return err
+		}
+		iface.ip = ip
+
+		flags, err := getFlagsIfreq(iface.sockfd, ifreq)
+		if err != nil {
+			return err
+		}
+		iface.flags = flags
+	}
+
 	rx, tx, err := sysfs.NetStatistics(iface.name)
 	if err != nil {
 		return &os.PathError{Op: "open", Path: iface.name, Err: err}

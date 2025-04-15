@@ -70,7 +70,8 @@ type CPU struct {
 	tick     *time.Ticker
 	topic    string
 
-	selectFn func() (temp, freq int64)
+	selectFn   func() (temp, freq int64)
+	selectMode string
 
 	mu   sync.RWMutex
 	once sync.Once
@@ -91,18 +92,9 @@ func NewCPU(cfg *config.Config) (*CPU, error) {
 		return nil, errNotSupported(c.Type(), err)
 	}
 
-	switch cfg.CPU.SelectionMode {
-	case "first":
-		c.selectFn = c.SelectFirst
-	case "avg", "average":
-		c.selectFn = c.SelectAvg
-	case "max", "maximum":
-		c.selectFn = c.SelectMax
-	case "min", "minimum":
-		c.selectFn = c.SelectMin
-	case "rand", "random":
-		c.selectFn = c.SelectRand
-	default:
+	c.setSelectionMode(cfg.CPU.SelectionMode)
+	if c.selectFn == nil {
+		c.selectMode = "auto"
 		c.selectFn = c.SelectAuto
 	}
 
@@ -561,6 +553,12 @@ func (c *CPU) AppendText(b []byte) ([]byte, error) {
 		b = byteutil.AppendDecimal(b, freq, 6)
 	}
 
+	if c.flags.Has(cpuTemperature | cpuFrequency) {
+		b = append(b, ", \"selection_mode\": \""...)
+		b = append(b, c.selectMode...)
+		b = append(b, '"')
+	}
+
 	if c.flags.Has(cpuUsage) {
 		b = append(b, ", \"usage\": "...)
 		b = strconv.AppendInt(b, int64(c.percent), 10)
@@ -674,4 +672,33 @@ func (c *CPU) SelectRand() (temp, freq int64) {
 	freq = c.cores[i].freq.Curr()
 
 	return
+}
+
+func (c *CPU) setSelectionMode(mode string) {
+	switch mode {
+	case "", "auto":
+		c.selectMode = "auto"
+		c.selectFn = c.SelectAuto
+	case "first":
+		c.selectMode = "first"
+		c.selectFn = c.SelectFirst
+	case "avg", "average":
+		c.selectMode = "average"
+		c.selectFn = c.SelectAvg
+	case "max", "maximum":
+		c.selectMode = "maximum"
+		c.selectFn = c.SelectMax
+	case "min", "minimum":
+		c.selectMode = "minimum"
+		c.selectFn = c.SelectMin
+	case "rand", "random":
+		c.selectMode = "random"
+		c.selectFn = c.SelectRand
+	}
+}
+
+func (c *CPU) SetSelectionMode(mode string) {
+	c.mu.Lock()
+	c.setSelectionMode(strings.ToLower(mode))
+	c.mu.Unlock()
 }

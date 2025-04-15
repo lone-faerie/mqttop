@@ -2,7 +2,9 @@ package bridge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -255,7 +257,7 @@ func (b *Bridge) updateState(ctx context.Context, m metrics.Metric, err error) (
 		return
 	}
 
-	log.Debug("State changed", "key", "from", !state, "to", state)
+	log.Debug("State changed", "topic", key, "from", !state, "to", state)
 
 	t := b.publishStates(false)
 	if err := waitToken(ctx, t); err != nil {
@@ -265,6 +267,33 @@ func (b *Bridge) updateState(ctx context.Context, m metrics.Metric, err error) (
 	return
 }
 
+func handleUpdatePayload(m metrics.Metric, payload []byte) error {
+	if len(payload) == 0 {
+		return nil
+	}
+
+	var mm map[string]string
+
+	if err := json.Unmarshal(payload, &mm); err != nil {
+		return err
+	}
+
+	if interval, ok := mm["interval"]; ok {
+		d, err := time.ParseDuration(interval)
+		if err == nil {
+			m.SetInterval(d)
+		}
+	}
+
+	if mode, ok := mm["selection_mode"]; ok {
+		if c, ok := m.(*metrics.CPU); ok {
+			c.SetSelectionMode(mode)
+		}
+	}
+
+	return nil
+}
+
 // metricHandler returns a [mqtt.MessageHandler] for the given metric that handles the "/update" and "/stop"
 // topics of the metric.
 func (b *Bridge) metricHandler(ctx context.Context, i int, m metrics.Metric) mqtt.MessageHandler {
@@ -272,10 +301,7 @@ func (b *Bridge) metricHandler(ctx context.Context, i int, m metrics.Metric) mqt
 		switch {
 		case strings.HasSuffix(msg.Topic(), "/update"):
 			go func(msg mqtt.Message) {
-				payload := string(msg.Payload())
-				if d, err := time.ParseDuration(payload); err == nil {
-					m.SetInterval(d)
-				}
+				handleUpdatePayload(m, msg.Payload())
 
 				if err := m.Update(); err == nil {
 					maybeSend(ctx, b.updates, m)
@@ -485,7 +511,8 @@ func (b *Bridge) publishRediscovery(ctx context.Context, m metrics.Metric) error
 		node, ok := b.discovery.Nodes[m.Type()]
 
 		if ok && len(cmps) > len(node) {
-			b.discovery.Nodes[m.Type()] = cmps
+			slices.Sort(cmps)
+			b.discovery.Nodes[m.Type()] = slices.Compact(cmps)
 		}
 	}
 

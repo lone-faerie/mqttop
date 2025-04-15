@@ -235,6 +235,27 @@ func (c *CPU) discover(core int, d *discovery.Discovery) {
 		}
 	}
 
+	if core == -1 && c.flags.Has(cpuTemperature|cpuFrequency) {
+		id = d.Origin.Name + "_cpu_select"
+
+		if cmps != nil {
+			cmps = append(cmps, id)
+		}
+
+		d.Components[id] = discovery.Component{
+			discovery.Platform:             discovery.Select,
+			discovery.Name:                 "CPU selection mode",
+			discovery.AvailabilityTopic:    d.AvailabilityTopic,
+			discovery.AvailabilityTemplate: avail,
+			discovery.CommandTopic:         c.Topic() + "/update",
+			discovery.CommandTemplate:      "{{ {'selection_mode': value} | tojson }}",
+			discovery.StateTopic:           c.Topic(),
+			discovery.ValueTemplate:        "{{ value_json.selection_mode | title }}",
+			discovery.Options:              []string{"Auto", "First", "Average", "Maximum", "Minimum", "Random"},
+			discovery.UniqueID:             id,
+		}
+	}
+
 	if cmps != nil {
 		d.Nodes[c.Type()] = cmps
 	}
@@ -609,6 +630,7 @@ func (m *Memory) Discover(d *discovery.Discovery) {
 func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery) {
 	id := d.Origin.Name + "_net_" + name + "_rx"
 	avail := availabilityTemplate(n.Topic())
+	attrsTemplate := fmt.Sprintf("{{ iif('ip' in value_json[%q], {'ip_address': value_json[%[1]q].ip}, {}) | tojson }}", name)
 
 	var cmps []string
 
@@ -626,16 +648,18 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 	}
 
 	d.Components[id] = discovery.Component{
-		discovery.Platform:             discovery.Sensor,
-		discovery.Name:                 "Network " + name + " rx rate",
-		discovery.EntityCategory:       discovery.Diagnostic,
-		discovery.DeviceClass:          "data_rate",
-		discovery.AvailabilityTopic:    d.AvailabilityTopic,
-		discovery.AvailabilityTemplate: avail,
-		discovery.StateTopic:           n.Topic(),
-		discovery.ValueTemplate:        fmt.Sprintf("{{ value_json[%q].download_rate|default(0) }}", name),
-		discovery.UnitOfMeasurement:    iface.rate,
-		discovery.UniqueID:             id,
+		discovery.Platform:               discovery.Sensor,
+		discovery.Name:                   "Network " + name + " rx rate",
+		discovery.EntityCategory:         discovery.Diagnostic,
+		discovery.DeviceClass:            "data_rate",
+		discovery.AvailabilityTopic:      d.AvailabilityTopic,
+		discovery.AvailabilityTemplate:   avail,
+		discovery.StateTopic:             n.Topic(),
+		discovery.ValueTemplate:          fmt.Sprintf("{{ value_json[%q].download_rate|default(0) }}", name),
+		discovery.UnitOfMeasurement:      iface.rate,
+		discovery.JSONAttributesTopic:    n.Topic(),
+		discovery.JSONAttributesTemplate: attrsTemplate,
+		discovery.UniqueID:               id,
 	}
 
 	id = id[:len(id)-2] + "tx"
@@ -644,16 +668,18 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 	}
 
 	d.Components[id] = discovery.Component{
-		discovery.Platform:             discovery.Sensor,
-		discovery.Name:                 "Network " + name + " tx rate",
-		discovery.EntityCategory:       discovery.Diagnostic,
-		discovery.DeviceClass:          "data_rate",
-		discovery.AvailabilityTopic:    d.AvailabilityTopic,
-		discovery.AvailabilityTemplate: avail,
-		discovery.StateTopic:           n.Topic(),
-		discovery.ValueTemplate:        fmt.Sprintf("{{ value_json[%q].upload_rate|default(0) }}", name),
-		discovery.UnitOfMeasurement:    iface.rate,
-		discovery.UniqueID:             id,
+		discovery.Platform:               discovery.Sensor,
+		discovery.Name:                   "Network " + name + " tx rate",
+		discovery.EntityCategory:         discovery.Diagnostic,
+		discovery.DeviceClass:            "data_rate",
+		discovery.AvailabilityTopic:      d.AvailabilityTopic,
+		discovery.AvailabilityTemplate:   avail,
+		discovery.StateTopic:             n.Topic(),
+		discovery.ValueTemplate:          fmt.Sprintf("{{ value_json[%q].upload_rate|default(0) }}", name),
+		discovery.UnitOfMeasurement:      iface.rate,
+		discovery.JSONAttributesTopic:    n.Topic(),
+		discovery.JSONAttributesTemplate: attrsTemplate,
+		discovery.UniqueID:               id,
 	}
 
 	id = d.Origin.Name + "_net_" + name + "_rx_bytes"
@@ -662,18 +688,20 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 	}
 
 	d.Components[id] = discovery.Component{
-		discovery.Platform:             discovery.Sensor,
-		discovery.Name:                 "Network " + name + " rx bytes",
-		discovery.Icon:                 icon.ServerNetwork,
-		discovery.EntityCategory:       discovery.Diagnostic,
-		discovery.DeviceClass:          "data_size",
-		discovery.AvailabilityTopic:    d.AvailabilityTopic,
-		discovery.AvailabilityTemplate: avail,
-		discovery.StateTopic:           n.Topic(),
-		discovery.ValueTemplate:        fmt.Sprintf("{{ value_json[%q].download }}", name),
-		discovery.UnitOfMeasurement:    byteutil.Bytes,
-		discovery.UniqueID:             id,
-		discovery.EnabledByDefault:     false,
+		discovery.Platform:               discovery.Sensor,
+		discovery.Name:                   "Network " + name + " rx bytes",
+		discovery.Icon:                   icon.ServerNetwork,
+		discovery.EntityCategory:         discovery.Diagnostic,
+		discovery.DeviceClass:            "data_size",
+		discovery.AvailabilityTopic:      d.AvailabilityTopic,
+		discovery.AvailabilityTemplate:   avail,
+		discovery.StateTopic:             n.Topic(),
+		discovery.ValueTemplate:          fmt.Sprintf("{{ value_json[%q].download }}", name),
+		discovery.UnitOfMeasurement:      byteutil.Bytes,
+		discovery.JSONAttributesTopic:    n.Topic(),
+		discovery.JSONAttributesTemplate: attrsTemplate,
+		discovery.UniqueID:               id,
+		discovery.EnabledByDefault:       false,
 	}
 
 	id = d.Origin.Name + "_net_" + name + "_tx_bytes"
@@ -682,18 +710,20 @@ func (iface *NetInterface) discover(name string, n *Net, d *discovery.Discovery)
 	}
 
 	d.Components[id] = discovery.Component{
-		discovery.Platform:             discovery.Sensor,
-		discovery.Name:                 "Network " + name + " tx bytes",
-		discovery.Icon:                 icon.ServerNetwork,
-		discovery.EntityCategory:       discovery.Diagnostic,
-		discovery.DeviceClass:          "data_size",
-		discovery.AvailabilityTopic:    d.AvailabilityTopic,
-		discovery.AvailabilityTemplate: avail,
-		discovery.StateTopic:           n.Topic(),
-		discovery.ValueTemplate:        fmt.Sprintf("{{ value_json[%q].upload }}", name),
-		discovery.UnitOfMeasurement:    byteutil.Bytes,
-		discovery.UniqueID:             id,
-		discovery.EnabledByDefault:     false,
+		discovery.Platform:               discovery.Sensor,
+		discovery.Name:                   "Network " + name + " tx bytes",
+		discovery.Icon:                   icon.ServerNetwork,
+		discovery.EntityCategory:         discovery.Diagnostic,
+		discovery.DeviceClass:            "data_size",
+		discovery.AvailabilityTopic:      d.AvailabilityTopic,
+		discovery.AvailabilityTemplate:   avail,
+		discovery.StateTopic:             n.Topic(),
+		discovery.ValueTemplate:          fmt.Sprintf("{{ value_json[%q].upload }}", name),
+		discovery.UnitOfMeasurement:      byteutil.Bytes,
+		discovery.JSONAttributesTopic:    n.Topic(),
+		discovery.JSONAttributesTemplate: attrsTemplate,
+		discovery.UniqueID:               id,
+		discovery.EnabledByDefault:       false,
 	}
 
 	if cmps != nil {

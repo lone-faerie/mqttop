@@ -305,6 +305,22 @@ var DefaultGPU = GPUConfig{
 	},
 }
 
+func (cfg *Config) parseRescan(rescan string, fallback time.Duration) (time.Duration, error) {
+	switch rescan {
+	case "true", "True", "TRUE", "y", "Y", "yes", "Yes", "YES", "on", "On", "ON":
+		if fallback > 0 {
+			return fallback, nil
+		} else {
+			return cfg.Interval, nil
+		}
+	case "false", "False", "FALSE", "n", "N", "no", "No", "NO", "off", "Off", "OFF":
+	case "":
+	default:
+		return time.ParseDuration(rescan)
+	}
+	return 0, nil
+}
+
 func (cfg *CPUConfig) load(_ *Config) error {
 	if !cfg.Enabled || cfg.NameTemplate == "" {
 		return nil
@@ -328,7 +344,7 @@ func (cfg *CPUConfig) FormatName(name string) string {
 	}
 
 	var b strings.Builder
-	if err := cfg.nameTemplate.Execute(&b, name); err != nil {
+	if err := cfg.nameTemplate.Execute(&b, nameStruct{name}); err != nil {
 		return name
 	}
 
@@ -370,18 +386,7 @@ func (cfg *DisksConfig) load(c *Config) (err error) {
 		cfg.diskMap[cfg.Disk[i].MountPoint] = &cfg.Disk[i]
 	}
 
-	switch cfg.Rescan {
-	case "true", "True", "TRUE", "y", "Y", "yes", "Yes", "YES", "on", "On", "ON":
-		if cfg.Interval > 0 {
-			cfg.RescanInterval = cfg.Interval
-		} else {
-			cfg.RescanInterval = c.Interval
-		}
-	case "false", "False", "FALSE", "n", "N", "no", "No", "NO", "off", "Off", "OFF":
-	case "":
-	default:
-		cfg.RescanInterval, err = time.ParseDuration(cfg.Rescan)
-	}
+	cfg.RescanInterval, err = c.parseRescan(cfg.Rescan, cfg.Interval)
 
 	return
 }
@@ -429,7 +434,7 @@ func (cfg *NetIfaceConfig) FormatName(name string) string {
 	}
 
 	var b strings.Builder
-	if err := cfg.nameTemplate.Execute(&b, name); err != nil {
+	if err := cfg.nameTemplate.Execute(&b, nameStruct{name}); err != nil {
 		return name
 	}
 
@@ -437,18 +442,7 @@ func (cfg *NetIfaceConfig) FormatName(name string) string {
 }
 
 func (cfg *NetConfig) load(c *Config) (err error) {
-	switch cfg.Rescan {
-	case "true", "True", "TRUE", "y", "Y", "yes", "Yes", "YES", "on", "On", "ON":
-		if cfg.Interval > 0 {
-			cfg.RescanInterval = cfg.Interval
-		} else {
-			cfg.RescanInterval = c.Interval
-		}
-	case "false", "False", "FALSE", "n", "N", "no", "No", "NO", "off", "Off", "OFF":
-	case "":
-	default:
-		cfg.RescanInterval, err = time.ParseDuration(cfg.Rescan)
-	}
+	cfg.RescanInterval, err = c.parseRescan(cfg.Rescan, cfg.Interval)
 
 	for i := range cfg.Include {
 		if cfg.Include[i].NameTemplate == "" {
@@ -493,7 +487,7 @@ func (cfg *DirConfig) FormatName(name string) string {
 	}
 
 	var b strings.Builder
-	if err := cfg.nameTemplate.Execute(&b, name); err != nil {
+	if err := cfg.nameTemplate.Execute(&b, nameStruct{name}); err != nil {
 		return name
 	}
 

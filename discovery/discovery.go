@@ -23,6 +23,7 @@ import (
 const (
 	BinarySensor = "binary_sensor" // https://www.home-assistant.io/integrations/binary_sensor.mqtt/
 	Button       = "button"        // https://www.home-assistant.io/integrations/button.mqtt/
+	Select       = "select"        // https://www.home-assistant.io/integrations/select.mqtt/
 	Sensor       = "sensor"        // https://www.home-assistant.io/integrations/sensor.mqtt/
 	Switch       = "switch"        // https://www.home-assistant.io/integrations/switch.mqtt/
 )
