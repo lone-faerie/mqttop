@@ -332,3 +332,24 @@ func AddTemplateFunc(name string, f any) {
 	}
 	customTemplateFuncs[name] = f
 }
+
+func yamlSecret(node *yaml.Node) {
+	if node.Tag == "!secret" {
+		if s, err := secrets.Read(node.Value); err == nil {
+			node.Value = s
+		} else {
+			node.Value = "!secret " + node.Value
+		}
+		node.Tag = "!!str"
+	}
+	for _, n := range node.Content {
+		yamlSecret(n)
+	}
+}
+
+func (cfg *Config) UnmarshalYAML(node *yaml.Node) error {
+	yamlSecret(node)
+
+	type Wrapped Config
+	return node.Decode((*Wrapped)(cfg))
+}
