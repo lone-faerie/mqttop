@@ -249,6 +249,10 @@ func (b *Batt) HasTimeRemaining() bool {
 	return b.flags&batteryTime == batteryTime
 }
 
+func (b *Batt) HasStatus() bool {
+	return b.flags&batteryStatus == batteryStatus
+}
+
 // Capacity returns the capacity of the battery. If b supports
 // reading capacity, it is returned directly. Otherwise, the capacity
 // is calculated from either charge or energy.

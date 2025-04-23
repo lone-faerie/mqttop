@@ -72,6 +72,7 @@ type CPU struct {
 
 	selectFn   func() (temp, freq int64)
 	selectMode string
+	rand       *rand.Rand
 
 	mu   sync.RWMutex
 	once sync.Once
@@ -218,6 +219,7 @@ func (c *CPU) findSensors() error {
 	}
 
 	if c.temp == nil {
+		log.Debug("No hwmon sensors found")
 		sensors, err = sysfs.ThermalSensors()
 		if err != nil {
 			return err
@@ -232,6 +234,9 @@ func (c *CPU) findSensors() error {
 				break
 			}
 		}
+	}
+	if c.temp == nil {
+		log.Debug("No thermal sensors found")
 	}
 
 	slices.SortFunc(coreSensors, func(a, b sysfs.Sensor) int {
@@ -318,6 +323,8 @@ func (c *CPU) loop(ctx context.Context) {
 		err error
 		ch  chan error
 	)
+
+	log.Debug("cpu started")
 
 	for {
 		select {
@@ -664,7 +671,7 @@ func (c *CPU) SelectMin() (temp, freq int64) {
 
 // SelectRand returns the temperature and frequency of a random core.
 func (c *CPU) SelectRand() (temp, freq int64) {
-	i := rand.IntN(len(c.cores))
+	i := c.rand.IntN(len(c.cores))
 	if c.cores[i].temp != nil {
 		temp = c.cores[i].temp.Value()
 	}
@@ -694,6 +701,9 @@ func (c *CPU) setSelectionMode(mode string) {
 	case "rand", "random":
 		c.selectMode = "random"
 		c.selectFn = c.SelectRand
+		if c.rand != nil {
+			c.rand = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+		}
 	}
 }
 

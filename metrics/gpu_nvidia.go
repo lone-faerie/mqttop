@@ -204,6 +204,8 @@ func (g *NvidiaGPU) loop(ctx context.Context) {
 		ch  chan error
 	)
 
+	log.Debug("gpu started")
+
 	for {
 		select {
 		case <-ctx.Done():

@@ -9,9 +9,11 @@ import (
 	"errors"
 	"iter"
 	"maps"
+	"math/rand/v2"
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 
@@ -34,6 +36,12 @@ const (
 	Diagnostic = "diagnostic"
 )
 
+const (
+	AvailabilityAll    = "all"
+	AvailabilityAny    = "any"
+	AvailabilityLatest = "latest"
+)
+
 // Component is the mapping of specific options for each MQTT component (i.e. entity).
 //
 // For example a temperature sensor:
@@ -46,6 +54,8 @@ const (
 //		UniqueID: "temp01ae_t",
 //	}
 type Component map[Option]any
+
+type AvailabilityList []map[Option]string
 
 // Discoverer is the interface that is implemented by a value to add it to the discovery
 // payload. Implementations should add each of its Components to the provided Discovery's Components field using unique keys.
@@ -392,6 +402,12 @@ func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool, ar
 		d.Method = method
 	}()
 
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(rand.N(100 * time.Millisecond)):
+	}
+
 	switch method {
 	case "", "device":
 		log.Debug("Publishing discovery", "method", "device")
@@ -415,9 +431,20 @@ func (d *Discovery) Publish(ctx context.Context, c mqtt.Client, migrate bool, ar
 }
 
 func (d *Discovery) Subscribe(ctx context.Context, c mqtt.Client) error {
+	return d.SubscribeFunc(ctx, c, nil)
+}
+
+func (d *Discovery) SubscribeFunc(ctx context.Context, c mqtt.Client, f func(context.Context)) error {
+	if f == nil {
+		f = func(_ context.Context) {}
+	}
+
 	t := c.Subscribe(d.cfg.WaitTopic, 0, func(_ mqtt.Client, msg mqtt.Message) {
 		if d.cfg.WaitPayload == "" || string(msg.Payload()) == d.cfg.WaitPayload {
-			go d.Publish(ctx, c, false)
+			go func() {
+				d.Publish(ctx, c, false)
+				f(ctx)
+			}()
 		}
 	})
 
@@ -459,4 +486,10 @@ func (d *Discovery) Diff(old *Discovery) bool {
 	}
 
 	return shouldMigrate(d.Method, old.Method)
+}
+
+func (d *Discovery) Discover(dd ...Discoverer) {
+	for i := range dd {
+		dd[i].Discover(d)
+	}
 }

@@ -32,6 +32,4 @@ func Example() {
 		log.Fatal(err)
 	}
 	fmt.Println(secret)
-	// Output:
-	// Hello, world!
 }

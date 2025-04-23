@@ -148,11 +148,11 @@ func maybeSend[T any](ctx context.Context, ch chan<- T, t T) bool {
 func (b *Bridge) loopMetric(ctx context.Context, i int, m metrics.Metric) {
 	defer func() {
 		m.Stop()
+
 		b.mu.Lock()
-
 		b.metrics[i] = nil
-
 		b.mu.Unlock()
+
 		b.wg.Done()
 	}()
 
@@ -375,7 +375,14 @@ func (b *Bridge) start(ctx context.Context) {
 	t = b.client.Subscribe(b.baseTopic+"/bridge/stop", 0, func(_ mqtt.Client, _ mqtt.Message) {
 		go b.Stop()
 	})
-	if err := waitToken(ctx, t); err != nil && b.err != nil {
+	if err := waitToken(ctx, t); err != nil && b.err == nil {
+		b.err = err
+	}
+
+	t = b.client.Subscribe(b.baseTopic+"/bridge/update", 0, func(_ mqtt.Client, _ mqtt.Message) {
+		go b.update(ctx)
+	})
+	if err := waitToken(ctx, t); err != nil && b.err == nil {
 		b.err = err
 	}
 
@@ -441,6 +448,42 @@ func (b *Bridge) Done() <-chan struct{} {
 
 func (b *Bridge) Error() error {
 	return b.err
+}
+
+func (b *Bridge) update(ctx context.Context) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var wg sync.WaitGroup
+
+	for _, m := range b.metrics {
+		if m == nil {
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			break
+		default:
+		}
+
+		wg.Add(1)
+		go func(m metrics.Metric) {
+			defer wg.Done()
+
+			err := m.Update()
+			b.updateState(ctx, m, err)
+
+			if err != nil && err != metrics.ErrNoChange {
+				log.WarnError("Error updating "+m.Type(), err)
+				return
+			}
+
+			maybeSend(ctx, b.updates, m)
+		}(m)
+	}
+
+	wg.Wait()
 }
 
 // publishStates publishes the bridge's states map to the LWT topic. If lwt is true, publishState
@@ -520,9 +563,50 @@ func (b *Bridge) publishRediscovery(ctx context.Context, m metrics.Metric) error
 }
 
 func (b *Bridge) discover(ctx context.Context) error {
+	b.Discover(b.discovery)
+
 	if err := b.discovery.Publish(ctx, b.client, b.migrate); err != nil {
 		return err
 	}
 
-	return b.discovery.Subscribe(ctx, b.client)
+	return b.discovery.SubscribeFunc(ctx, b.client, func(ctx context.Context) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+		b.update(ctx)
+	})
+}
+
+func (b *Bridge) Discover(d *discovery.Discovery) {
+	var cmps []string
+
+	if d.Nodes != nil {
+		node, ok := d.Nodes["bridge"]
+		if !ok || node == nil {
+			node = make([]string, 0, 2)
+		}
+
+		cmps = node
+	}
+
+	id := d.Origin.Name + "_update"
+	if cmps != nil {
+		cmps = append(cmps, id)
+	}
+
+	d.Components[id] = discovery.Component{
+		discovery.Platform:             discovery.Button,
+		discovery.Name:                 "Update",
+		discovery.DeviceClass:          "restart",
+		discovery.AvailabilityTopic:    d.AvailabilityTopic,
+		discovery.AvailabilityTemplate: "{{ iif(value == 'offline', value, 'online') }}",
+		discovery.CommandTopic:         b.baseTopic + "/bridge/update",
+		discovery.UniqueID:             id,
+	}
+
+	if cmps != nil {
+		d.Nodes["bridge"] = cmps
+	}
 }

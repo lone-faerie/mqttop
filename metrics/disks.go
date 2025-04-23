@@ -32,6 +32,8 @@ type Disk struct {
 	writes int64
 	ticks  int64
 	showIO bool
+
+	err error
 }
 
 // Disks implements the [Metric] interface to provide the system disks
@@ -157,6 +159,8 @@ func (d *Disks) loop(ctx context.Context) {
 	}
 
 	defer close(d.ch)
+
+	log.Debug("disks started")
 
 	for {
 		select {
@@ -375,6 +379,10 @@ func (d *Disks) AppendText(b []byte) ([]byte, error) {
 	first := true
 
 	for _, disk := range d.disks {
+		if disk.err != nil {
+			continue
+		}
+
 		if !first {
 			b = append(b, ',', ' ')
 		}
@@ -414,8 +422,11 @@ func (d *Disks) MarshalJSON() ([]byte, error) {
 // be sent on the channel returned by [Disks.Updated] unlike updates that
 // happen automatically every update interval.
 func (d *Disk) Update() (err error) {
+	d.err = nil
+
 	stat, err := file.Statfs(d.Mnt)
 	if err != nil {
+		d.err = err
 		return
 	}
 
@@ -439,7 +450,7 @@ func (d *Disk) Update() (err error) {
 	if e != nil {
 		log.WarnError("Can't read block io", err, "mnt", d.Mnt)
 		d.showIO = false
-
+		d.err = err
 		return e
 	}
 

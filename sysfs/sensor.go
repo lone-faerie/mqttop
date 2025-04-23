@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lone-faerie/mqttop/internal/file"
+	"github.com/lone-faerie/mqttop/log"
 )
 
 type Sensor struct {
@@ -55,6 +56,7 @@ func hwmonSensors(search map[string]bool) (gotCoretemp bool, err error) {
 
 		for _, file := range files {
 			if strings.HasPrefix(file, "temp") && strings.HasSuffix(file, "_input") {
+				log.Debug("Found possible hwmon sensors", "path", path)
 				search[path] = true
 
 				break
@@ -101,6 +103,7 @@ func HWMonSensors() ([]Sensor, error) {
 	gotCoretemp, err := hwmonSensors(search)
 
 	if err != nil {
+		log.Debug("hwmonSensors error", "cause", err)
 		if errors.Is(err, os.ErrNotExist) {
 			err = nil
 		}
@@ -109,6 +112,7 @@ func HWMonSensors() ([]Sensor, error) {
 	}
 
 	if !gotCoretemp {
+		log.Debug("Didn't get coretemp")
 		if gotCoretemp, err = coretempSensors(search); err != nil {
 			return nil, err
 		}
@@ -146,6 +150,7 @@ func HWMonSensors() ([]Sensor, error) {
 				max = crit
 			}
 
+			log.Debug("Adding sensor", "name", name, "path", fpath)
 			sensors = append(sensors, Sensor{string(name), string(label), fpath, max, 0})
 		}
 	}
@@ -225,6 +230,7 @@ func ThermalSensors() ([]Sensor, error) {
 			max = crit
 		}
 
+		log.Debug("Adding sensor", "path", path)
 		sensors = append(sensors, Sensor{name, string(label), path, max, 0})
 
 		return nil

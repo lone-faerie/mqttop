@@ -62,6 +62,10 @@ func (f batteryFlag) String() string {
 		s = append(s, "time")
 	}
 
+	if f.Has(batteryStatus) {
+		s = append(s, "status")
+	}
+
 	return fmt.Sprintf("%s (%08b)", strings.Join(s, "|"), f)
 }
 
@@ -160,6 +164,7 @@ func (b *Battery) setFlags() {
 	b.setFlag(b.bat.HasCurrent, batteryCurrent)
 	b.setFlag(b.bat.HasVoltage, batteryVoltage)
 	b.setFlag(b.bat.HasTimeRemaining, batteryTime)
+	b.setFlag(b.bat.HasStatus, batteryStatus)
 }
 
 // Type returns the metric type, "battery".
@@ -197,6 +202,8 @@ func (b *Battery) loop(ctx context.Context) {
 		err error
 		ch  chan error
 	)
+
+	log.Debug("battery started")
 
 	for {
 		select {
@@ -378,7 +385,10 @@ func (b *Battery) updateVoltage() error {
 }
 
 func (b *Battery) updateTimeRemaining() error {
-	const scale = uint64(time.Hour)
+	const (
+		scale    = uint64(time.Hour)
+		overflow = uint64(5124096)
+	)
 
 	var x, y uint64
 
@@ -425,8 +435,11 @@ func (b *Battery) updateTimeRemaining() error {
 		return nil
 	}
 
-	b.timeRemaining = time.Duration(scale * x / y)
-
+	if x < overflow {
+		b.timeRemaining = time.Duration(scale * x / y)
+	} else {
+		b.timeRemaining = time.Duration(scale / y * x)
+	}
 	return nil
 }
 

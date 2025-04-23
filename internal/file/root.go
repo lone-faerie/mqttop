@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lone-faerie/mqttop/log"
 	"golang.org/x/sys/unix"
 )
 
@@ -19,16 +20,16 @@ func init() {
 }
 
 func abs(name string) (string, error) {
-	if strings.HasPrefix(name, root) {
-		return name, nil
-	}
-
 	name, err := filepath.Abs(name)
 	if err != nil {
 		return "", err
 	}
 
 	if root == "/" {
+		return name, nil
+	}
+
+	if strings.HasPrefix(name, root) {
 		return name, nil
 	}
 
@@ -57,6 +58,17 @@ func sysOpen(name string) (int, error) {
 //
 // If the environment variable $MQTTOP_ROOTFS_PATH is set, this is automatically
 // handled on init.
-func SetRoot(s string) {
+func SetRoot(s string) error {
+	s, err := filepath.EvalSymlinks(s)
+	if err != nil {
+		return err
+	}
+
+	s, err = filepath.Abs(s)
+	if err != nil {
+		return err
+	}
+	log.Debug("Setting root", "path", s)
 	root = s
+	return nil
 }

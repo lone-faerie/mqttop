@@ -163,6 +163,8 @@ func (m *Memory) loop(ctx context.Context) {
 		ch  chan error
 	)
 
+	log.Debug("memory started")
+
 	for {
 		select {
 		case <-ctx.Done():

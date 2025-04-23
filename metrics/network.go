@@ -182,7 +182,7 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 		if iface, ok := n.interfaces[name]; !ok || !firstRun {
 			addr, err := getAddr4(sock, name)
 			if err != nil {
-				continue
+				log.Debug("Couldn't get address for interface", err, "name", name)
 			}
 
 			var ratestr string
@@ -197,6 +197,7 @@ func (n *Net) parseInterfaces(firstRun bool) error {
 			}
 
 			if n.skipInterface(name) {
+				log.Debug("Skipping interface", "name", name)
 				if !firstRun {
 					delete(n.interfaces, name)
 				}
@@ -294,6 +295,8 @@ func (n *Net) loop(ctx context.Context) {
 	}
 
 	defer close(n.ch)
+
+	log.Debug("network started")
 
 	for {
 		select {
@@ -484,6 +487,22 @@ func (n *Net) MarshalJSON() ([]byte, error) {
 	return n.AppendText(nil)
 }
 
+func updateIfreq(sockfd int, name string) (ip netip.Addr, flags uint16, err error) {
+	ifreq, err := unix.NewIfreq(name)
+	if err != nil {
+		return
+	}
+
+	ip, err = getAddr4Ifreq(sockfd, ifreq)
+	if err != nil {
+		return
+	}
+
+	flags, err = getFlagsIfreq(sockfd, ifreq)
+
+	return
+}
+
 // Update forces the individual network interface to update. The returned
 // error will not be sent on the channel returned by [Net.Updated] unlike
 // updates that happen automatically every update interval.
@@ -491,22 +510,11 @@ func (iface *NetInterface) Update() error {
 	if iface.sockfd != 0 {
 		defer func() { iface.sockfd = 0 }()
 
-		ifreq, err := unix.NewIfreq(iface.name)
-		if err != nil {
-			return err
+		ip, flags, err := updateIfreq(iface.sockfd, iface.name)
+		if err == nil {
+			iface.ip = ip
+			iface.flags = flags
 		}
-
-		ip, err := getAddr4Ifreq(iface.sockfd, ifreq)
-		if err != nil {
-			return err
-		}
-		iface.ip = ip
-
-		flags, err := getFlagsIfreq(iface.sockfd, ifreq)
-		if err != nil {
-			return err
-		}
-		iface.flags = flags
 	}
 
 	rx, tx, err := sysfs.NetStatistics(iface.name)

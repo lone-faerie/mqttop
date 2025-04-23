@@ -306,6 +306,8 @@ func (d *Dir) loop(ctx context.Context) {
 	defer d.tick.Stop()
 	defer close(d.ch)
 
+	log.Debug("dir started", "path", d.path)
+
 	if d.watcher != nil {
 		d.loopWatch(ctx)
 		return
