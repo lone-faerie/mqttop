@@ -2,12 +2,52 @@ package config_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/lone-faerie/mqttop/config"
 )
+
+const testYaml = `
+base_topic: $MQTTOP_TEST
+mqtt:
+  username: "!secret mqttop_test"
+  password: !secret mqttop_test
+`
+
+func TestRead(t *testing.T) {
+	t.Cleanup(func() {
+		os.Remove("/run/secrets/mqttop_test")
+	})
+
+	err := os.WriteFile("/run/secrets/mqttop_test", []byte("test secret"), 0666)
+	if os.IsPermission(err) {
+		t.Skip("Skipping expand:", err)
+	} else if err != nil {
+		t.Fatalf("Error writing /run/secrets/mqttop_test: %v", err)
+	}
+
+	t.Setenv("MQTTOP_TEST", "test env")
+
+	cfg, err := config.Read(strings.NewReader(testYaml[1:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BaseTopic != "test env" {
+		t.Errorf("Env: want \"test env\", got %q", cfg.BaseTopic)
+	}
+	if cfg.CPU.Topic != "test env/metric/cpu" {
+		t.Errorf("Expand BaseTopic: want \"test env/metric/cpu\", got %q", cfg.CPU.Topic)
+	}
+	if cfg.MQTT.Username != "test secret" {
+		t.Errorf("Secret String: want \"test secret\", got %q", cfg.MQTT.Username)
+	}
+	if cfg.MQTT.Password != "test secret" {
+		t.Errorf("Secret Tag: want \"test secret\", got %q", cfg.MQTT.Password)
+	}
+}
 
 func TestReplaceBase(t *testing.T) {
 	var tests = []struct {
